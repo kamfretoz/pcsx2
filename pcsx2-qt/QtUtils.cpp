@@ -74,6 +74,23 @@ namespace QtUtils
 		return widget;
 	}
 
+	void ShowOrRaiseWindow(QWidget* window)
+	{
+		if (!window)
+			return;
+
+		if (!window->isVisible())
+		{
+			window->show();
+		}
+		else
+		{
+			window->raise();
+			window->activateWindow();
+			window->setFocus();
+		}
+	}
+
 	template <typename T>
 	static void ResizeColumnsForView(T* view, const std::initializer_list<int>& widths)
 	{
