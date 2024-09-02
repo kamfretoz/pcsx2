@@ -19,6 +19,7 @@ find_package(LZ4 REQUIRED)
 find_package(WebP REQUIRED) # v1.3.2, spews an error on Linux because no pkg-config.
 find_package(SDL2 2.30.4 REQUIRED)
 find_package(Freetype 2.13.2 REQUIRED) # 2.13.3, but flatpak is still on 2.13.2.
+find_package(lunasvg 2.4.1 REQUIRED)
 
 if(USE_VULKAN)
 	find_package(Shaderc REQUIRED)
