@@ -42,7 +42,8 @@ APPDIRNAME=PCSX2.AppDir
 STRIP=strip
 
 declare -a MANUAL_LIBS=(
-	"libshaderc_shared.so.1"
+	"libfreetype.so"
+	"libshaderc_shared.so"
 )
 
 declare -a MANUAL_QT_LIBS=(
