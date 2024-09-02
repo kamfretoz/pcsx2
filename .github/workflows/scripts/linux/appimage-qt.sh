@@ -42,7 +42,8 @@ APPDIRNAME=PCSX2.AppDir
 STRIP=strip
 
 declare -a MANUAL_LIBS=(
-	"libshaderc_shared.so.1"
+	"libfreetype.so.6"
+	"libshaderc_shared.so"
 )
 
 declare -a MANUAL_QT_LIBS=(
@@ -87,21 +88,16 @@ OUTDIR=$(realpath "./$APPDIRNAME")
 rm -fr "$OUTDIR"
 
 echo "Locating extra libraries..."
-EXTRA_LIBS_ARGS=""
+EXTRA_LIBS_ARGS=()
 for lib in "${MANUAL_LIBS[@]}"; do
 	srcpath=$(find "$DEPSDIR" -name "$lib")
 	if [ ! -f "$srcpath" ]; then
-		echo "Missinge extra library $lib. Exiting."
+		echo "Missing extra library $lib. Exiting."
 		exit 1
 	fi
 
 	echo "Found $lib at $srcpath."
-
-	if [ "$EXTRA_LIBS_ARGS" == "" ]; then
-		EXTRA_LIBS_ARGS="--library=$srcpath"
-	else
-		EXTRA_LIBS_ARGS="$EXTRA_LIBS_ARGS,$srcpath"
-	fi
+	EXTRA_LIBS_ARGS+=("--library=$srcpath")
 done
 
 # Why the nastyness? linuxdeploy strips our main binary, and there's no option to turn it off.
