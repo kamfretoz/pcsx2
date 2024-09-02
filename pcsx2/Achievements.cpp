@@ -44,6 +44,7 @@
 #include <limits>
 #include <optional>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #ifdef ENABLE_RAINTEGRATION
@@ -128,6 +129,7 @@ namespace Achievements
 	static void BeginLoadGame();
 	static void UpdateGameSummary();
 	static void DownloadImage(std::string url, std::string cache_filename);
+	static void UpdateGlyphRanges();
 
 	// Size of the EE physical memory exposed to RetroAchievements.
 	static u32 GetExposedEEMemorySize();
@@ -339,6 +341,91 @@ void Achievements::DownloadImage(std::string url, std::string cache_filename)
 	};
 
 	s_http_downloader->CreateRequest(std::move(url), std::move(callback));
+}
+
+void Achievements::UpdateGlyphRanges()
+{
+	// To avoid rasterizing all emoji fonts, we get the set of used glyphs in the emoji range for all strings in the
+	// current game's achievement data.
+	using CodepointSet = std::unordered_set<ImGuiManager::WCharType>;
+	CodepointSet codepoints;
+	static constexpr auto add_string = [](const std::string_view str, CodepointSet& codepoints) {
+		char32_t codepoint;
+		for (size_t offset = 0; offset < str.length();)
+		{
+			offset += StringUtil::DecodeUTF8(str, offset, &codepoint);
+			// Basic Latin + Latin Supplement always included.
+			if (codepoint != StringUtil::UNICODE_REPLACEMENT_CHARACTER && codepoint >= 0x2000)
+				codepoints.insert(static_cast<ImGuiManager::WCharType>(codepoint));
+		}
+	};
+	if (rc_client_has_rich_presence(s_client))
+	{
+		std::vector<const char*> rp_strings;
+		for (;;)
+		{
+			rp_strings.resize(std::max<size_t>(rp_strings.size() * 2, 512));
+			size_t count;
+			const int err = rc_client_get_rich_presence_strings(s_client, rp_strings.data(), rp_strings.size(), &count);
+			if (err == RC_INSUFFICIENT_BUFFER)
+				continue;
+			else if (err != RC_OK)
+				rp_strings.clear();
+			else
+				rp_strings.resize(count);
+			break;
+		}
+		for (const char* str : rp_strings)
+			add_string(str, codepoints);
+	}
+	if (rc_client_has_achievements(s_client))
+	{
+		rc_client_achievement_list_t* const achievements =
+			rc_client_create_achievement_list(s_client, RC_CLIENT_ACHIEVEMENT_CATEGORY_CORE_AND_UNOFFICIAL, 0);
+		if (achievements)
+		{
+			for (u32 i = 0; i < achievements->num_buckets; i++)
+			{
+				const rc_client_achievement_bucket_t& bucket = achievements->buckets[i];
+				for (u32 j = 0; j < bucket.num_achievements; j++)
+				{
+					const rc_client_achievement_t* achievement = bucket.achievements[j];
+					if (achievement->title)
+						add_string(achievement->title, codepoints);
+					if (achievement->description)
+						add_string(achievement->description, codepoints);
+				}
+			}
+			rc_client_destroy_achievement_list(achievements);
+		}
+	}
+	if (rc_client_has_leaderboards(s_client))
+	{
+		rc_client_leaderboard_list_t* const leaderboards =
+			rc_client_create_leaderboard_list(s_client, RC_CLIENT_LEADERBOARD_LIST_GROUPING_NONE);
+		if (leaderboards)
+		{
+			for (u32 i = 0; i < leaderboards->num_buckets; i++)
+			{
+				const rc_client_leaderboard_bucket_t& bucket = leaderboards->buckets[i];
+				for (u32 j = 0; j < bucket.num_leaderboards; j++)
+				{
+					const rc_client_leaderboard_t* leaderboard = bucket.leaderboards[j];
+					if (leaderboard->title)
+						add_string(leaderboard->title, codepoints);
+					if (leaderboard->description)
+						add_string(leaderboard->description, codepoints);
+				}
+			}
+			rc_client_destroy_leaderboard_list(leaderboards);
+		}
+	}
+	std::vector<ImGuiManager::WCharType> sorted_codepoints;
+	sorted_codepoints.reserve(codepoints.size());
+	sorted_codepoints.insert(sorted_codepoints.begin(), codepoints.begin(), codepoints.end());
+	std::sort(sorted_codepoints.begin(), sorted_codepoints.end());
+	// Compact codepoints to ranges.
+	ImGuiManager::SetEmojiFontRange(ImGuiManager::CompactFontRange(sorted_codepoints));
 }
 
 bool Achievements::IsActive()
@@ -579,6 +666,7 @@ bool Achievements::Shutdown(bool allow_cancel)
 	DisableHardcoreMode();
 	ClearGameInfo();
 	ClearGameHash();
+	UpdateGlyphRanges();
 
 	if (s_login_request)
 	{
@@ -950,6 +1038,9 @@ void Achievements::ClientLoadGameCallback(int result, const char* error_message,
 	s_game_icon = {};
 	s_game_icon_url = {};
 
+	// update ranges before initializing fsui
+	UpdateGlyphRanges();
+
 	// ensure fullscreen UI is ready for notifications
 	MTGS::RunOnGSThread(&ImGuiManager::InitializeFullscreenUI);
 
@@ -1070,7 +1161,10 @@ void Achievements::HandleResetEvent(const rc_client_event_t* event)
 	rc_client_reset(s_client);
 
 	if (HasActiveGame())
+	{
 		UpdateGameSummary();
+		UpdateGlyphRanges();
+	}
 }
 
 void Achievements::HandleUnlockEvent(const rc_client_event_t* event)
@@ -2176,6 +2270,7 @@ void Achievements::DrawAchievementsWindow()
 	const ImVec4 heading_background(0.13f, 0.13f, 0.13f, heading_alpha);
 	const ImVec2 display_size(ImGui::GetIO().DisplaySize);
 	const float heading_height = ImGuiFullscreen::LayoutScale(heading_height_unscaled);
+	bool close_window = false;
 
 	if (ImGuiFullscreen::BeginFullscreenWindow(ImVec2(0.0f, 0.0f), ImVec2(display_size.x, heading_height), "achievements_heading",
 			heading_background, 0.0f, ImVec2(), ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoScrollWithMouse))
@@ -2210,11 +2305,9 @@ void Achievements::DrawAchievementsWindow()
 			SmallString text;
 			ImVec2 text_size;
 
-			if (ImGuiFullscreen::FloatingButton(ICON_FA_WINDOW_CLOSE, 10.0f, 10.0f, -1.0f, -1.0f, 1.0f, 0.0f, true, g_large_font) ||
-				ImGuiFullscreen::WantsToCloseMenu())
-			{
-				FullscreenUI::ReturnToPreviousWindow();
-			}
+			close_window = (ImGuiFullscreen::FloatingButton(ICON_FA_WINDOW_CLOSE, 10.0f, 10.0f, -1.0f, -1.0f, 1.0f, 0.0f,
+								true, g_large_font) ||
+							ImGuiFullscreen::WantsToCloseMenu());
 
 			const ImRect title_bb(ImVec2(left, top), ImVec2(right, top + g_large_font->FontSize));
 			text.assign(s_game_title);
@@ -2281,6 +2374,9 @@ void Achievements::DrawAchievementsWindow()
 
 	ImGui::SetNextWindowBgAlpha(alpha);
 
+	if (ImGuiFullscreen::IsFocusResetFromWindowChange())
+		ImGui::SetNextWindowScroll(ImVec2(0.0f, 0.0f));
+
 	if (ImGuiFullscreen::BeginFullscreenWindow(
 			ImVec2(0.0f, heading_height),
 			ImVec2(display_size.x, display_size.y - heading_height - LayoutScale(ImGuiFullscreen::LAYOUT_FOOTER_HEIGHT)),
@@ -2298,6 +2394,7 @@ void Achievements::DrawAchievementsWindow()
 			TRANSLATE_NOOP("Achievements", "Almost There"),
 		};
 
+		ImGuiFullscreen::ResetFocusHere();
 		ImGuiFullscreen::BeginMenuButtons();
 
 		for (u32 bucket_type : {RC_CLIENT_ACHIEVEMENT_BUCKET_ACTIVE_CHALLENGE, RC_CLIENT_ACHIEVEMENT_BUCKET_RECENTLY_UNLOCKED,
@@ -2642,8 +2739,14 @@ void Achievements::DrawLeaderboardsWindow()
 				const float tab_width = (ImGui::GetWindowWidth() / ImGuiFullscreen::g_layout_scale) * 0.5f;
 				ImGui::SetCursorPos(ImVec2(0.0f, top + spacing_small));
 
-				if (ImGui::IsKeyPressed(ImGuiKey_NavGamepadTweakSlow, false) || ImGui::IsKeyPressed(ImGuiKey_NavGamepadTweakFast, false))
+				if (ImGui::IsKeyPressed(ImGuiKey_GamepadDpadLeft, false) ||
+					ImGui::IsKeyPressed(ImGuiKey_NavGamepadTweakSlow, false) ||
+					ImGui::IsKeyPressed(ImGuiKey_LeftArrow, false) || ImGui::IsKeyPressed(ImGuiKey_GamepadDpadRight, false) ||
+					ImGui::IsKeyPressed(ImGuiKey_NavGamepadTweakFast, false) || ImGui::IsKeyPressed(ImGuiKey_RightArrow, false))
+				{
 					s_is_showing_all_leaderboard_entries = !s_is_showing_all_leaderboard_entries;
+					ImGuiFullscreen::QueueResetFocus(ImGuiFullscreen::FocusResetType::Other);
+				}
 
 				for (const bool show_all : {false, true})
 				{
@@ -2710,6 +2813,10 @@ void Achievements::DrawLeaderboardsWindow()
 	ImGuiFullscreen::EndFullscreenWindow();
 	FullscreenUI::SetStandardSelectionFooterText(true);
 
+	// See note in FullscreenUI::DrawSettingsWindow().
+	if (ImGuiFullscreen::IsFocusResetFromWindowChange())
+		ImGui::SetNextWindowScroll(ImVec2(0.0f, 0.0f));
+
 	if (!is_leaderboard_open)
 	{
 		if (ImGuiFullscreen::BeginFullscreenWindow(
@@ -2717,6 +2824,7 @@ void Achievements::DrawLeaderboardsWindow()
 				ImVec2(display_size.x, display_size.y - heading_height - LayoutScale(ImGuiFullscreen::LAYOUT_FOOTER_HEIGHT)),
 				"leaderboards", background, 0.0f, ImVec2(ImGuiFullscreen::LAYOUT_MENU_WINDOW_X_PADDING, 0.0f), 0))
 		{
+			ImGuiFullscreen::ResetFocusHere();
 			ImGuiFullscreen::BeginMenuButtons();
 
 			for (u32 bucket_index = 0; bucket_index < s_leaderboard_list->num_buckets; bucket_index++)
@@ -2737,6 +2845,13 @@ void Achievements::DrawLeaderboardsWindow()
 				ImVec2(display_size.x, display_size.y - heading_height - LayoutScale(ImGuiFullscreen::LAYOUT_FOOTER_HEIGHT)),
 				"leaderboard", background, 0.0f, ImVec2(ImGuiFullscreen::LAYOUT_MENU_WINDOW_X_PADDING, 0.0f), 0))
 		{
+			// Defer focus reset until loading finishes.
+			if (!s_is_showing_all_leaderboard_entries ||
+				(ImGuiFullscreen::IsFocusResetFromWindowChange() && !s_leaderboard_entry_lists.empty()))
+			{
+				ImGuiFullscreen::ResetFocusHere();
+			}
+
 			ImGuiFullscreen::BeginMenuButtons();
 
 			if (!s_is_showing_all_leaderboard_entries)
@@ -2926,6 +3041,7 @@ void Achievements::OpenLeaderboard(const rc_client_leaderboard_t* lboard)
 	s_is_showing_all_leaderboard_entries = false;
 	s_leaderboard_fetch_handle = rc_client_begin_fetch_leaderboard_entries_around_user(
 		s_client, lboard->id, LEADERBOARD_NEARBY_ENTRIES_TO_FETCH, LeaderboardFetchNearbyCallback, nullptr);
+	ImGuiFullscreen::QueueResetFocus(ImGuiFullscreen::FocusResetType::Other);
 }
 
 void Achievements::LeaderboardFetchNearbyCallback(
@@ -3001,6 +3117,7 @@ void Achievements::CloseLeaderboard()
 	}
 
 	s_open_leaderboard = nullptr;
+	ImGuiFullscreen::QueueResetFocus(ImGuiFullscreen::FocusResetType::Other);
 }
 
 #ifdef ENABLE_RAINTEGRATION

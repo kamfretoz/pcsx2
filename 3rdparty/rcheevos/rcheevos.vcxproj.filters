@@ -81,9 +81,6 @@
     <ClCompile Include="src\rcheevos\operand.c">
       <Filter>rcheevos</Filter>
     </ClCompile>
-    <ClCompile Include="src\rcheevos\rc_validate.c">
-      <Filter>rcheevos</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\rapi\rc_api_common.h">
