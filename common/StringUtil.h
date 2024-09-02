@@ -269,6 +269,9 @@ namespace StringUtil
 	size_t DecodeUTF8(const std::string_view str, size_t offset, char32_t* ch);
 	size_t DecodeUTF8(const std::string& str, size_t offset, char32_t* ch);
 
+	/// Unicode replacement character.
+	static constexpr char32_t UNICODE_REPLACEMENT_CHARACTER = 0xFFFD;
+
 	// Replaces the end of a string with ellipsis if it exceeds the specified length.
 	std::string Ellipsise(const std::string_view str, u32 max_length, const char* ellipsis = "...");
 	void EllipsiseInPlace(std::string& str, u32 max_length, const char* ellipsis = "...");
