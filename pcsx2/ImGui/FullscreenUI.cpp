@@ -1,8 +1,6 @@
 // SPDX-FileCopyrightText: 2002-2024 PCSX2 Dev Team
 // SPDX-License-Identifier: GPL-3.0+
 
-#define IMGUI_DEFINE_MATH_OPERATORS
-
 #include "CDVD/CDVDcommon.h"
 #include "GS/Renderers/Common/GSDevice.h"
 #include "GS/Renderers/Common/GSTexture.h"
