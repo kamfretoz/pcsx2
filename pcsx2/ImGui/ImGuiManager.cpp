@@ -9,6 +9,7 @@
 #include "IconsFontAwesome5.h"
 #include "ImGui/FullscreenUI.h"
 #include "ImGui/ImGuiFullscreen.h"
+#include "ImGui/ImGuiGlyphRanges.inl"
 #include "ImGui/ImGuiManager.h"
 #include "ImGui/ImGuiOverlays.h"
 #include "Input/InputManager.h"
@@ -25,6 +26,7 @@
 
 #include "fmt/format.h"
 #include "imgui.h"
+#include "imgui_freetype.h"
 #include "imgui_internal.h"
 #include "common/Image.h"
 
@@ -32,25 +34,34 @@
 #include <cmath>
 #include <deque>
 #include <mutex>
+#include <type_traits>
 #include <unordered_map>
 
 namespace ImGuiManager
 {
-	struct SoftwareCursor
+	namespace
 	{
-		std::string image_path;
-		std::unique_ptr<GSTexture> texture;
-		u32 color;
-		float scale;
-		float extent_x;
-		float extent_y;
-		std::pair<float, float> pos;
-	};
+
+		struct SoftwareCursor
+		{
+			std::string image_path;
+			std::unique_ptr<GSTexture> texture;
+			u32 color;
+			float scale;
+			float extent_x;
+			float extent_y;
+			std::pair<float, float> pos;
+		};
+
+	} // namespace
+
+	static_assert(std::is_same_v<WCharType, ImWchar>);
 
 	static void UpdateScale();
 	static void SetStyle();
 	static void SetKeyMap();
 	static bool LoadFontData();
+	static void ReloadFontDataIfActive();
 	static void UnloadFontData();
 	static bool AddImGuiFonts(bool fullscreen_fonts);
 	static ImFont* AddTextFont(float size);
@@ -63,45 +74,48 @@ namespace ImGuiManager
 	static void DestroySoftwareCursorTextures();
 	static void DrawSoftwareCursor(const SoftwareCursor& sc, const std::pair<float, float>& pos);
 	static void DrawSoftwareCursors();
+
+	static float s_global_scale = 1.0f;
+
+	static std::string s_font_path;
+	static std::vector<WCharType> s_font_range;
+	static std::vector<WCharType> s_emoji_range;
+
+	static ImFont* s_standard_font;
+	static ImFont* s_fixed_font;
+	static ImFont* s_medium_font;
+	static ImFont* s_large_font;
+
+	static std::vector<u8> s_standard_font_data;
+	static std::vector<u8> s_fixed_font_data;
+	static std::vector<u8> s_icon_fa_font_data;
+	static std::vector<u8> s_icon_pf_font_data;
+	static std::vector<u8> s_emoji_font_data;
+
+	static float s_window_width;
+	static float s_window_height;
+	static Common::Timer s_last_render_time;
+
+	// cached copies of WantCaptureKeyboard/Mouse, used to know when to dispatch events
+	static std::atomic_bool s_imgui_wants_keyboard{false};
+	static std::atomic_bool s_imgui_wants_mouse{false};
+	static std::atomic_bool s_imgui_wants_text{false};
+
+	// mapping of host key -> imgui key
+	static std::unordered_map<u32, ImGuiKey> s_imgui_key_map;
+
+	static constexpr float OSD_FADE_IN_TIME = 0.1f;
+	static constexpr float OSD_FADE_OUT_TIME = 0.4f;
+
+	// need to keep track of this, so we can reinitialize on renderer switch
+	static bool s_fullscreen_ui_was_initialized = false;
+	static bool s_scale_changed = false;
+
+	static std::array<ImGuiManager::SoftwareCursor, InputManager::MAX_SOFTWARE_CURSORS> s_software_cursors = {};
+
 } // namespace ImGuiManager
 
-static float s_global_scale = 1.0f;
-
-static std::string s_font_path;
-static std::vector<ImWchar> s_font_range;
-
-static ImFont* s_standard_font;
-static ImFont* s_fixed_font;
-static ImFont* s_medium_font;
-static ImFont* s_large_font;
-
-static std::vector<u8> s_standard_font_data;
-static std::vector<u8> s_fixed_font_data;
-static std::vector<u8> s_icon_fa_font_data;
-static std::vector<u8> s_icon_pf_font_data;
-
-static float s_window_width;
-static float s_window_height;
-static Common::Timer s_last_render_time;
-
-// cached copies of WantCaptureKeyboard/Mouse, used to know when to dispatch events
-static std::atomic_bool s_imgui_wants_keyboard{false};
-static std::atomic_bool s_imgui_wants_mouse{false};
-static std::atomic_bool s_imgui_wants_text{false};
-
-// mapping of host key -> imgui key
-static std::unordered_map<u32, ImGuiKey> s_imgui_key_map;
-
-static constexpr float OSD_FADE_IN_TIME = 0.1f;
-static constexpr float OSD_FADE_OUT_TIME = 0.4f;
-
-// need to keep track of this, so we can reinitialize on renderer switch
-static bool s_fullscreen_ui_was_initialized = false;
-static bool s_scale_changed = false;
-
-static std::array<ImGuiManager::SoftwareCursor, InputManager::MAX_SOFTWARE_CURSORS> s_software_cursors = {};
-
-void ImGuiManager::SetFontPathAndRange(std::string path, std::vector<u16> range)
+void ImGuiManager::SetFontPathAndRange(std::string path, std::vector<WCharType> range)
 {
 	if (s_font_path == path && s_font_range == range)
 		return;
@@ -109,23 +123,36 @@ void ImGuiManager::SetFontPathAndRange(std::string path, std::vector<u16> range)
 	s_font_path = std::move(path);
 	s_font_range = std::move(range);
 	s_standard_font_data = {};
-
-	if (ImGui::GetCurrentContext())
-	{
-		ImGui::EndFrame();
-
-		if (!LoadFontData())
-			pxFailRel("Failed to load font data");
-
-		if (!AddImGuiFonts(HasFullscreenFonts()))
-			pxFailRel("Failed to create ImGui font text");
-
-		if (!g_gs_device->UpdateImGuiFontTexture())
-			pxFailRel("Failed to recreate font texture after scale+resize");
-
-		NewFrame();
-	}
+	ReloadFontDataIfActive();
 }
+
+void ImGuiManager::SetEmojiFontRange(std::vector<WCharType> range)
+{
+	static constexpr size_t builtin_size = std::size(EMOJI_ICON_RANGE);
+	const size_t runtime_size = range.size();
+	if (runtime_size == 0)
+	{
+		if (s_emoji_range.empty())
+			return;
+		s_emoji_range = {};
+	}
+	else
+	{
+		if (!s_emoji_range.empty() && (s_emoji_range.size() - builtin_size) == range.size() &&
+			std::memcmp(s_emoji_range.data(), range.data(), range.size() * sizeof(ImWchar)) == 0)
+		{
+			// no change
+			return;
+		}
+
+		s_emoji_range = std::move(range);
+		s_emoji_range.resize(s_emoji_range.size() + builtin_size);
+		std::memcpy(&s_emoji_range[runtime_size], EMOJI_ICON_RANGE, sizeof(EMOJI_ICON_RANGE));
+	}
+
+	ImGuiManager::ReloadFontDataIfActive();
+}
+
 
 bool ImGuiManager::Initialize()
 {
@@ -437,6 +464,16 @@ bool ImGuiManager::LoadFontData()
 		s_icon_pf_font_data = std::move(font_data.value());
 	}
 
+	if (s_emoji_font_data.empty())
+	{
+		std::optional<std::vector<u8>> font_data =
+			FileSystem::ReadBinaryFile(EmuFolders::GetOverridableResourcePath("fonts" FS_OSPATH_SEPARATOR_STR "TwitterColorEmoji-SVGinOT.ttf").c_str());
+		if (!font_data.has_value())
+			return false;
+
+		s_emoji_font_data = std::move(font_data.value());
+	}
+
 	return true;
 }
 
@@ -446,6 +483,7 @@ void ImGuiManager::UnloadFontData()
 	std::vector<u8>().swap(s_fixed_font_data);
 	std::vector<u8>().swap(s_icon_fa_font_data);
 	std::vector<u8>().swap(s_icon_pf_font_data);
+	std::vector<u8>().swap(s_emoji_font_data);
 }
 
 ImFont* ImGuiManager::AddTextFont(float size)
@@ -487,10 +525,20 @@ ImFont* ImGuiManager::AddFixedFont(float size)
 
 bool ImGuiManager::AddIconFonts(float size)
 {
-	// clang-format off
-	static constexpr ImWchar range_fa[] = { 0xe06f,0xe06f,0xf001,0xf002,0xf005,0xf005,0xf007,0xf007,0xf00c,0xf00e,0xf011,0xf011,0xf013,0xf013,0xf017,0xf017,0xf019,0xf019,0xf021,0xf023,0xf025,0xf028,0xf02b,0xf02b,0xf02e,0xf02e,0xf030,0xf030,0xf03a,0xf03a,0xf03d,0xf03e,0xf04b,0xf04c,0xf04e,0xf04e,0xf050,0xf050,0xf052,0xf052,0xf05a,0xf05a,0xf05e,0xf05e,0xf063,0xf063,0xf067,0xf067,0xf06a,0xf06a,0xf06e,0xf06e,0xf071,0xf071,0xf077,0xf078,0xf07b,0xf07c,0xf084,0xf084,0xf091,0xf091,0xf0ac,0xf0ad,0xf0b0,0xf0b0,0xf0c5,0xf0c5,0xf0c7,0xf0c8,0xf0cb,0xf0cb,0xf0d0,0xf0d0,0xf0dc,0xf0dc,0xf0e2,0xf0e2,0xf0eb,0xf0eb,0xf0f3,0xf0f3,0xf0fe,0xf0fe,0xf11b,0xf11c,0xf120,0xf121,0xf129,0xf12a,0xf140,0xf140,0xf14a,0xf14a,0xf15b,0xf15b,0xf15d,0xf15d,0xf187,0xf188,0xf191,0xf192,0xf1b3,0xf1b3,0xf1de,0xf1de,0xf1e6,0xf1e6,0xf1ea,0xf1eb,0xf1f8,0xf1f8,0xf1fc,0xf1fc,0xf21e,0xf21e,0xf245,0xf245,0xf26c,0xf26c,0xf279,0xf279,0xf2bd,0xf2bd,0xf2db,0xf2db,0xf2f2,0xf2f2,0xf302,0xf302,0xf3c1,0xf3c1,0xf3fd,0xf3fd,0xf410,0xf410,0xf462,0xf462,0xf466,0xf466,0xf4e2,0xf4e2,0xf51f,0xf51f,0xf545,0xf545,0xf54c,0xf54c,0xf553,0xf553,0xf56d,0xf56d,0xf5a2,0xf5a2,0xf65d,0xf65e,0xf6a9,0xf6a9,0xf70e,0xf70e,0xf756,0xf756,0xf780,0xf780,0xf794,0xf794,0xf815,0xf815,0xf84c,0xf84c,0xf8cc,0xf8cc,0x0,0x0 };
-	static constexpr ImWchar range_pf[] = { 0x2198,0x2199,0x219e,0x21a7,0x21b0,0x21b3,0x21ba,0x21c3,0x21ce,0x21ce,0x21d0,0x21d4,0x21dc,0x21dd,0x21e0,0x21e3,0x21e6,0x21e8,0x21f3,0x21f3,0x21f7,0x21f8,0x21fa,0x21fb,0x2206,0x2208,0x221a,0x221a,0x227a,0x227d,0x22bf,0x22c8,0x2349,0x2349,0x235a,0x235e,0x2360,0x2361,0x2364,0x2367,0x237a,0x237b,0x237d,0x237d,0x237f,0x237f,0x23b2,0x23b5,0x23cc,0x23cc,0x23f4,0x23f7,0x2427,0x243a,0x243d,0x243d,0x2443,0x2443,0x2460,0x246b,0x248f,0x248f,0x24f5,0x24fd,0x24ff,0x24ff,0x2605,0x2605,0x2699,0x2699,0x278a,0x278e,0xe000,0xe001,0xff21,0xff3a,0x0,0x0 };
-	// clang-format on
+	{
+		ImFontConfig cfg;
+		cfg.MergeMode = true;
+		cfg.PixelSnapH = true;
+		cfg.GlyphMinAdvanceX = size;
+		cfg.GlyphMaxAdvanceX = size;
+		cfg.FontDataOwnedByAtlas = false;
+
+		if (!ImGui::GetIO().Fonts->AddFontFromMemoryTTF(
+				s_icon_fa_font_data.data(), static_cast<int>(s_icon_fa_font_data.size()), size * 0.75f, &cfg, FA_ICON_RANGE))
+			[[unlikely]]
+			return false;
+	}
+
 
 	{
 		ImFontConfig cfg;
@@ -501,7 +549,8 @@ bool ImGuiManager::AddIconFonts(float size)
 		cfg.FontDataOwnedByAtlas = false;
 
 		if (!ImGui::GetIO().Fonts->AddFontFromMemoryTTF(
-				s_icon_fa_font_data.data(), static_cast<int>(s_icon_fa_font_data.size()), size * 0.75f, &cfg, range_fa))
+				s_icon_pf_font_data.data(), static_cast<int>(s_icon_pf_font_data.size()), size * 1.2f, &cfg, PF_ICON_RANGE))
+			[[unlikely]]
 		{
 			return false;
 		}
@@ -514,9 +563,11 @@ bool ImGuiManager::AddIconFonts(float size)
 		cfg.GlyphMinAdvanceX = size;
 		cfg.GlyphMaxAdvanceX = size;
 		cfg.FontDataOwnedByAtlas = false;
+		cfg.FontBuilderFlags = ImGuiFreeTypeBuilderFlags_LoadColor | ImGuiFreeTypeBuilderFlags_Bitmap;
 
 		if (!ImGui::GetIO().Fonts->AddFontFromMemoryTTF(
-				s_icon_pf_font_data.data(), static_cast<int>(s_icon_pf_font_data.size()), size * 1.2f, &cfg, range_pf))
+				s_emoji_font_data.data(), static_cast<int>(s_emoji_font_data.size()), size * 0.9f, &cfg,
+				s_emoji_range.empty() ? EMOJI_ICON_RANGE : s_emoji_range.data())) [[unlikely]]
 		{
 			return false;
 		}
@@ -527,7 +578,8 @@ bool ImGuiManager::AddIconFonts(float size)
 
 bool ImGuiManager::AddImGuiFonts(bool fullscreen_fonts)
 {
-	const float standard_font_size = std::ceil(15.0f * s_global_scale);
+	const float standard_font_size = std::ceil(18.0f * s_global_scale);
+	const float fixed_font_size = std::ceil(15.0f * s_global_scale);
 
 	ImGuiIO& io = ImGui::GetIO();
 	io.Fonts->Clear();
@@ -536,7 +588,7 @@ bool ImGuiManager::AddImGuiFonts(bool fullscreen_fonts)
 	if (!s_standard_font || !AddIconFonts(standard_font_size))
 		return false;
 
-	s_fixed_font = AddFixedFont(standard_font_size);
+	s_fixed_font = AddFixedFont(fixed_font_size);
 	if (!s_fixed_font)
 		return false;
 
@@ -562,6 +614,47 @@ bool ImGuiManager::AddImGuiFonts(bool fullscreen_fonts)
 
 	return io.Fonts->Build();
 }
+
+void ImGuiManager::ReloadFontDataIfActive()
+{
+	if (!ImGui::GetCurrentContext())
+		return;
+	ImGui::EndFrame();
+	if (!LoadFontData())
+		Console.Error("Failed to load font data");
+	if (!AddImGuiFonts(HasFullscreenFonts()))
+		Console.Error("Failed to create ImGui font text");
+	if (!g_gs_device->UpdateImGuiFontTexture())
+		Console.Error("Failed to recreate font texture after scale+resize");
+	NewFrame();
+}
+
+std::vector<ImGuiManager::WCharType> ImGuiManager::CompactFontRange(std::span<const WCharType> range)
+{
+	std::vector<ImWchar> ret;
+	for (auto it = range.begin(); it != range.end();)
+	{
+		auto next_it = it;
+		++next_it;
+		// Combine sequential ranges.
+		const ImWchar start_codepoint = *it;
+		ImWchar end_codepoint = start_codepoint;
+		while (next_it != range.end())
+		{
+			const ImWchar next_codepoint = *next_it;
+			if (next_codepoint != (end_codepoint + 1))
+				break;
+			// Yep, include it.
+			end_codepoint = next_codepoint;
+			++next_it;
+		}
+		ret.push_back(start_codepoint);
+		ret.push_back(end_codepoint);
+		it = next_it;
+	}
+	return ret;
+}
+
 
 bool ImGuiManager::AddFullscreenFontsIfMissing()
 {
@@ -720,10 +813,10 @@ void ImGuiManager::DrawOSDMessages(Common::Timer::Value current_time)
 
 	ImFont* const font = ImGui::GetFont();
 	const float scale = s_global_scale;
-	const float spacing = std::ceil(5.0f * scale);
-	const float margin = std::ceil(10.0f * scale);
-	const float padding = std::ceil(8.0f * scale);
-	const float rounding = std::ceil(5.0f * scale);
+	const float spacing = std::ceil(6.0f * scale);
+	const float margin = std::ceil(12.0f * scale);
+	const float padding = std::ceil(10.0f * scale);
+	const float rounding = std::ceil(6.0f * scale);
 	const float max_width = s_window_width - (margin + padding) * 2.0f;
 	float position_x = GSConfig.OsdMessagesPos == OsdOverlayPos::TopRight ? GetWindowWidth() - margin : margin;
 	float position_y = margin;

@@ -12,13 +12,14 @@ find_package(Threads REQUIRED)
 set(FIND_FRAMEWORK_BACKUP ${CMAKE_FIND_FRAMEWORK})
 set(CMAKE_FIND_FRAMEWORK NEVER)
 find_package(PNG 1.6.40 REQUIRED)
-find_package(JPEG REQUIRED) # No version because flatpak uses libjpeg-turbo.
+find_package(JPEG REQUIRED)
 find_package(ZLIB REQUIRED) # v1.3, but Mac uses the SDK version.
 find_package(Zstd 1.5.5 REQUIRED)
 find_package(LZ4 REQUIRED)
 find_package(WebP REQUIRED) # v1.3.2, spews an error on Linux because no pkg-config.
 find_package(SDL3 3.2.6 REQUIRED)
-find_package(Freetype 2.11.1 REQUIRED)
+find_package(Freetype 2.13.2 REQUIRED) # 2.13.3, but flatpak is still on 2.13.2.
+find_package(lunasvg 2.4.1 REQUIRED)
 
 if(USE_VULKAN)
 	find_package(Shaderc REQUIRED)
