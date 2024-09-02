@@ -1,5 +1,6 @@
 #!/bin/bash
 
+
 set -e
 
 merge_binaries() {
@@ -39,7 +40,7 @@ if [ "${INSTALLDIR:0:1}" != "/" ]; then
 fi
 
 FREETYPE=2.13.3
-HARFBUZZ=10.0.1
+HARFBUZZ=10.4.0
 SDL=SDL3-3.2.8
 ZSTD=1.5.7
 LZ4=b8fd2d15309dd4e605070bd4486e26b6ef814e29
@@ -51,6 +52,7 @@ MOLTENVK=1.2.9
 QT=6.7.2
 KDDOCKWIDGETS=2.2.1
 
+LUNASVG=9af1ac7b90658a279b372add52d6f77a4ebb482c
 SHADERC=2024.1
 SHADERC_GLSLANG=142052fa30f9eca191aa9dcf65359fcaed09eeec
 SHADERC_SPIRVHEADERS=5e3ad389ee56fca27c9705d093ae5387ce404df4
@@ -76,7 +78,7 @@ CMAKE_ARCH_UNIVERSAL=-DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"
 
 cat > SHASUMS <<EOF
 0550350666d427c74daeb85d5ac7bb353acba5f76956395995311a9c6f063289  freetype-$FREETYPE.tar.xz
-e7358ea86fe10fb9261931af6f010d4358dac64f7074420ca9bc94aae2bdd542  harfbuzz-$HARFBUZZ.tar.gz
+0d25a3f74af4e8744700ac19050af5a80ae330378a5802a5cd71e523bb6fda1f  harfbuzz-$HARFBUZZ.tar.gz
 13388fabb361de768ecdf2b65e52bb27d1054cae6ccb6942ba926e378e00db03  $SDL.tar.gz
 eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3  zstd-$ZSTD.tar.gz
 0728800155f3ed0a0c87e03addbd30ecbe374f7b080678bbca1506051d50dec3  $LZ4.tar.gz
@@ -84,12 +86,13 @@ eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3  zstd-$ZSTD.tar
 7d6fab70cf844bf6769077bd5d7a74893f8ffd4dfb42861745750c63c2a5c92c  libwebp-$LIBWEBP.tar.gz
 04705c110cb2469caa79fb71fba3d7bf834914706e9641a4589485c1f832565b  jpegsrc.v$LIBJPEG.tar.gz
 57be87c22d9b49c112b6d24bc67d42508660e6b718b3db89c44e47e289137082  ffmpeg-$FFMPEG.tar.xz
-f415a09385030c6510a936155ce211f617c31506db5fbc563e804345f1ecf56e  v$MOLTENVK.tar.gz
-c5f22a5e10fb162895ded7de0963328e7307611c688487b5d152c9ee64767599  qtbase-everywhere-src-$QT.tar.xz
-e1a1d8785fae67d16ad0a443b01d5f32663a6b68d275f1806ebab257485ce5d6  qtimageformats-everywhere-src-$QT.tar.xz
-fb0d1286a35be3583fee34aeb5843c94719e07193bdf1d4d8b0dc14009caef01  qtsvg-everywhere-src-$QT.tar.xz
-58e855ad1b2533094726c8a425766b63a04a0eede2ed85086860e54593aa4b2a  qttools-everywhere-src-$QT.tar.xz
-9845780b5dc1b7279d57836db51aeaf2e4a1160c42be09750616f39157582ca9  qttranslations-everywhere-src-$QT.tar.xz
+85beaf8abfcc54d9da0ff0257ae311abd9e7aa96e53da37e1c37d6bc04ac83cd  v$MOLTENVK.tar.gz
+b7338da1bdccb4d861e714efffaa83f174dfe37e194916bfd7ec82279a6ace19  qtbase-everywhere-src-$QT.tar.xz
+a733b98f771064d000476b8861f822143982749448ba8abf9f1813edb8dfe79f  qtimageformats-everywhere-src-$QT.tar.xz
+3ed5b80f7228c41dd463b7a57284ed273d224d1c323c0dd78c5209635807cbce  qtsvg-everywhere-src-$QT.tar.xz
+0953cddf6248f3959279a10904892e8a98eb3e463d729a174b6fc47febd99824  qttools-everywhere-src-$QT.tar.xz
+03d71565872b0e0e7303349071df031ab0f922f6dbdd3a5ec1ade9e188e4fbf4  qttranslations-everywhere-src-$QT.tar.xz
+3998b024b0d442614a9ee270e76e018bb37a17b8c6941212171731123cbbcac7  lunasvg-$LUNASVG.tar.gz
 eb3b5f0c16313d34f208d90c2fa1e588a23283eed63b101edd5422be6165d528  shaderc-$SHADERC.tar.gz
 aa27e4454ce631c5a17924ce0624eac736da19fc6f5a2ab15a6c58da7b36950f  shaderc-glslang-$SHADERC_GLSLANG.tar.gz
 5d866ce34a4b6908e262e5ebfffc0a5e11dd411640b5f24c85a80ad44c0d4697  shaderc-spirv-headers-$SHADERC_SPIRVHEADERS.tar.gz
@@ -113,6 +116,7 @@ curl -C - -L \
 	-O "https://download.qt.io/official_releases/qt/${QT%.*}/$QT/submodules/qtsvg-everywhere-src-$QT.tar.xz" \
 	-O "https://download.qt.io/official_releases/qt/${QT%.*}/$QT/submodules/qttools-everywhere-src-$QT.tar.xz" \
 	-O "https://download.qt.io/official_releases/qt/${QT%.*}/$QT/submodules/qttranslations-everywhere-src-$QT.tar.xz" \
+	-o "lunasvg-$LUNASVG.tar.gz" "https://github.com/stenzek/lunasvg/archive/$LUNASVG.tar.gz" \
 	-o "shaderc-$SHADERC.tar.gz" "https://github.com/google/shaderc/archive/refs/tags/v$SHADERC.tar.gz" \
 	-o "shaderc-glslang-$SHADERC_GLSLANG.tar.gz" "https://github.com/KhronosGroup/glslang/archive/$SHADERC_GLSLANG.tar.gz" \
 	-o "shaderc-spirv-headers-$SHADERC_SPIRVHEADERS.tar.gz" "https://github.com/KhronosGroup/SPIRV-Headers/archive/$SHADERC_SPIRVHEADERS.tar.gz" \

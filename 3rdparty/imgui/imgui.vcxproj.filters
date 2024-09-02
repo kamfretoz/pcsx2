@@ -9,6 +9,8 @@
     <ClInclude Include="include\imstb_truetype.h" />
     <ClInclude Include="include\imgui_stdlib.h" />
     <ClInclude Include="include\imgui_freetype.h" />
+    <ClInclude Include="include\lunasvg.h" />
+    <ClInclude Include="include\lunasvg_c.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\imgui.cpp" />

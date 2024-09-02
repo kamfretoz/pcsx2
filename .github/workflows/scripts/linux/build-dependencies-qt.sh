@@ -14,6 +14,8 @@ if [ "${INSTALLDIR:0:1}" != "/" ]; then
 	INSTALLDIR="$PWD/$INSTALLDIR"
 fi
 
+FREETYPE=2.13.3
+HARFBUZZ=10.4.0
 LIBBACKTRACE=ad106d5fdd5d960bd33fae1c48a351af567fd075
 LIBJPEG=9f
 LIBPNG=1.6.45
@@ -27,12 +29,15 @@ KDDOCKWIDGETS=2.2.1
 SHADERC=2024.1
 SHADERC_GLSLANG=142052fa30f9eca191aa9dcf65359fcaed09eeec
 SHADERC_SPIRVHEADERS=5e3ad389ee56fca27c9705d093ae5387ce404df4
+LUNASVG=9af1ac7b90658a279b372add52d6f77a4ebb482c
 SHADERC_SPIRVTOOLS=dd4b663e13c07fea4fbb3f70c1c91c86731099f7
 
 mkdir -p deps-build
 cd deps-build
 
 cat > SHASUMS <<EOF
+0550350666d427c74daeb85d5ac7bb353acba5f76956395995311a9c6f063289  freetype-$FREETYPE.tar.xz
+0d25a3f74af4e8744700ac19050af5a80ae330378a5802a5cd71e523bb6fda1f  harfbuzz-$HARFBUZZ.tar.gz
 fd6f417fe9e3a071cf1424a5152d926a34c4a3c5070745470be6cf12a404ed79  $LIBBACKTRACE.zip
 04705c110cb2469caa79fb71fba3d7bf834914706e9641a4589485c1f832565b  jpegsrc.v$LIBJPEG.tar.gz
 926485350139ffb51ef69760db35f78846c805fef3d59bfdcb2fba704663f370  libpng-$LIBPNG.tar.xz
@@ -46,6 +51,7 @@ aa2579f21ca66d19cbcf31d87e9067e07932635d36869c8239d4decd0a9dc1fa  qtsvg-everywhe
 326381b7d43f07913612f291abc298ae79bd95382e2233abce982cff2b53d2c0  qttools-everywhere-src-$QT.tar.xz
 d2106e8a580bfd77702c4c1840299288d344902b0e2c758ca813ea04c6d6a3d1  qttranslations-everywhere-src-$QT.tar.xz
 5e46157908295f2bf924462d8c0855b0508ba338ced9e810891fefa295dc9647  qtwayland-everywhere-src-$QT.tar.xz
+3998b024b0d442614a9ee270e76e018bb37a17b8c6941212171731123cbbcac7  lunasvg-$LUNASVG.tar.gz
 eb3b5f0c16313d34f208d90c2fa1e588a23283eed63b101edd5422be6165d528  shaderc-$SHADERC.tar.gz
 aa27e4454ce631c5a17924ce0624eac736da19fc6f5a2ab15a6c58da7b36950f  shaderc-glslang-$SHADERC_GLSLANG.tar.gz
 5d866ce34a4b6908e262e5ebfffc0a5e11dd411640b5f24c85a80ad44c0d4697  shaderc-spirv-headers-$SHADERC_SPIRVHEADERS.tar.gz
@@ -67,6 +73,9 @@ curl -L \
 	-O "https://download.qt.io/official_releases/qt/${QT%.*}/$QT/submodules/qttools-everywhere-src-$QT.tar.xz" \
 	-O "https://download.qt.io/official_releases/qt/${QT%.*}/$QT/submodules/qttranslations-everywhere-src-$QT.tar.xz" \
 	-O "https://download.qt.io/official_releases/qt/${QT%.*}/$QT/submodules/qtwayland-everywhere-src-$QT.tar.xz" \
+	-o "harfbuzz-$HARFBUZZ.tar.gz" "https://github.com/harfbuzz/harfbuzz/archive/refs/tags/$HARFBUZZ.tar.gz"\
+	-o "freetype-$FREETYPE.tar.xz" "https://sourceforge.net/projects/freetype/files/freetype2/$FREETYPE/freetype-$FREETYPE.tar.xz/download"\
+	-o "lunasvg-$LUNASVG.tar.gz" "https://github.com/JordanTheToaster/lunasvg/archive/$LUNASVG.tar.gz" \
 	-o "shaderc-$SHADERC.tar.gz" "https://github.com/google/shaderc/archive/refs/tags/v$SHADERC.tar.gz" \
 	-o "shaderc-glslang-$SHADERC_GLSLANG.tar.gz" "https://github.com/KhronosGroup/glslang/archive/$SHADERC_GLSLANG.tar.gz" \
 	-o "shaderc-spirv-headers-$SHADERC_SPIRVHEADERS.tar.gz" "https://github.com/KhronosGroup/SPIRV-Headers/archive/$SHADERC_SPIRVHEADERS.tar.gz" \
@@ -138,6 +147,33 @@ rm -fr "$SDL"
 tar xf "$SDL.tar.gz"
 cd "$SDL"
 cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$INSTALLDIR" -DCMAKE_INSTALL_PREFIX="$INSTALLDIR" -DBUILD_SHARED_LIBS=ON -DSDL_SHARED=ON -DSDL_STATIC=OFF -G Ninja
+cmake --build build --parallel
+ninja -C build install
+cd ..
+
+		echo "Building FreeType with HarfBuzz..."
+		rm -fr "freetype-$FREETYPE"
+		tar xf "freetype-$FREETYPE.tar.xz"
+		cd "freetype-$FREETYPE"
+		cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$INSTALLDIR" -DCMAKE_INSTALL_PREFIX="$INSTALLDIR" -DBUILD_SHARED_LIBS=ON -DFT_REQUIRE_ZLIB=ON -DFT_REQUIRE_PNG=ON -DFT_DISABLE_BZIP2=TRUE -DFT_DISABLE_BROTLI=TRUE -DFT_DISABLE_HARFBUZZ=TRUE -B build -G Ninja
+		cmake --build build --parallel
+		ninja -C build install
+		cd ..
+
+		echo "Building HarfBuzz..."
+		rm -fr "harfbuzz-$HARFBUZZ"
+		tar xf "harfbuzz-$HARFBUZZ.tar.gz"
+		cd "harfbuzz-$HARFBUZZ"
+		cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$INSTALLDIR" -DCMAKE_INSTALL_PREFIX="$INSTALLDIR" -DBUILD_SHARED_LIBS=ON -DHB_BUILD_UTILS=OFF -B build -G Ninja
+		cmake --build build --parallel
+		ninja -C build install
+		cd ..
+
+echo "Building lunasvg..."
+rm -fr "lunasvg-$LUNASVG"
+tar xf "lunasvg-$LUNASVG.tar.gz"
+cd "lunasvg-$LUNASVG"
+cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$INSTALLDIR" -DCMAKE_INSTALL_PREFIX="$INSTALLDIR" -DBUILD_SHARED_LIBS=ON -DLUNASVG_BUILD_EXAMPLES=OFF -B build -G Ninja
 cmake --build build --parallel
 ninja -C build install
 cd ..
