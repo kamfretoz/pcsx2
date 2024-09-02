@@ -53,6 +53,7 @@ set ZLIB=1.3.1
 set ZLIBSHORT=131
 set ZSTD=1.5.6
 
+set LUNASVG=9af1ac7b90658a279b372add52d6f77a4ebb482c
 set SHADERC=2024.1
 set SHADERC_GLSLANG=142052fa30f9eca191aa9dcf65359fcaed09eeec
 set SHADERC_SPIRVHEADERS=5e3ad389ee56fca27c9705d093ae5387ce404df4
@@ -149,6 +150,15 @@ rmdir /S /Q "freetype-%FREETYPE%"
 tar -xf "freetype-%FREETYPE%.tar.gz" || goto error
 cd "freetype-%FREETYPE%" || goto error
 cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="%INSTALLDIR%" -DCMAKE_INSTALL_PREFIX="%INSTALLDIR%" -DBUILD_SHARED_LIBS=ON -DFT_REQUIRE_ZLIB=TRUE -DFT_REQUIRE_PNG=TRUE -DFT_DISABLE_BZIP2=TRUE -DFT_DISABLE_BROTLI=TRUE -DFT_REQUIRE_HARFBUZZ=TRUE -B build -G Ninja || goto error
+cmake --build build --parallel || goto error
+ninja -C build install || goto error
+cd .. || goto error
+
+echo Building lunasvg...
+rmdir /S /Q "lunasvg-%LUNASVG%"
+%SEVENZIP% x "lunasvg-%LUNASVG%.zip" || goto error
+cd "lunasvg-%LUNASVG%" || goto error
+cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="%INSTALLDIR%" -DCMAKE_INSTALL_PREFIX="%INSTALLDIR%" -DBUILD_SHARED_LIBS=ON -DLUNASVG_BUILD_EXAMPLES=OFF -B build -G Ninja
 cmake --build build --parallel || goto error
 ninja -C build install || goto error
 cd .. || goto error
