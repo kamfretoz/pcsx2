@@ -427,7 +427,7 @@ namespace StringUtil
 		}
 
 	invalid:
-		*ch = 0xFFFFFFFFu;
+		*ch = UNICODE_REPLACEMENT_CHARACTER; // unicode replacement character
 		return 1;
 	}
 
