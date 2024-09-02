@@ -32,6 +32,7 @@
 #include <cmath>
 #include <deque>
 #include <mutex>
+#include <type_traits>
 #include <unordered_map>
 
 namespace ImGuiManager
@@ -46,6 +47,8 @@ namespace ImGuiManager
 		float extent_y;
 		std::pair<float, float> pos;
 	};
+
+	static_assert(std::is_same_v<WCharType, ImWchar>);
 
 	static void UpdateScale();
 	static void SetStyle();
@@ -68,7 +71,7 @@ namespace ImGuiManager
 static float s_global_scale = 1.0f;
 
 static std::string s_font_path;
-static std::vector<ImWchar> s_font_range;
+static std::vector<WCharType> s_font_range;
 
 static ImFont* s_standard_font;
 static ImFont* s_fixed_font;
@@ -101,7 +104,7 @@ static bool s_scale_changed = false;
 
 static std::array<ImGuiManager::SoftwareCursor, InputManager::MAX_SOFTWARE_CURSORS> s_software_cursors = {};
 
-void ImGuiManager::SetFontPathAndRange(std::string path, std::vector<u16> range)
+void ImGuiManager::SetFontPathAndRange(std::string path, std::vector<WCharType> range)
 {
 	if (s_font_path == path && s_font_range == range)
 		return;
