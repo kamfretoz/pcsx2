@@ -5,6 +5,8 @@ add_library(imgui
 	include/imgui_internal.h
 	include/imgui_stdlib.h
 	include/imstb_textedit.h
+	include/lunasvg.h
+	include/lunasvg_c.h
 	src/imgui.cpp
 	src/imgui_demo.cpp
 	src/imgui_draw.cpp
@@ -18,7 +20,7 @@ add_library(imgui
 
 target_include_directories(imgui PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_include_directories(imgui PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_link_libraries(imgui PUBLIC Freetype::Freetype)
+target_link_libraries(imgui PUBLIC Freetype::Freetype lunasvg::lunasvg)
 
 # Needed for macOS compile.
 set_property(TARGET imgui PROPERTY CXX_STANDARD 17)
