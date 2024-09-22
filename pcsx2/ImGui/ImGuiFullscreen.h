@@ -124,6 +124,7 @@ namespace ImGuiFullscreen
 	bool ResetFocusHere();
 	bool IsFocusResetQueued();
 	FocusResetType GetQueuedFocusResetType();
+	bool IsFocusResetFromWindowChange();
 	void ForceKeyNavEnabled();
 
 	bool WantsToCloseMenu();

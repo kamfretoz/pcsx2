@@ -138,9 +138,9 @@ using ImGuiFullscreen::ForceKeyNavEnabled;
 using ImGuiFullscreen::GetCachedTexture;
 using ImGuiFullscreen::GetCachedTextureAsync;
 using ImGuiFullscreen::GetPlaceholderTexture;
-using ImGuiFullscreen::GetQueuedFocusResetType;
 using ImGuiFullscreen::HorizontalMenuItem;
 using ImGuiFullscreen::IsFocusResetQueued;
+using ImGuiFullscreen::IsFocusResetFromWindowChange;
 using ImGuiFullscreen::IsGamepadInputSource;
 using ImGuiFullscreen::LayoutScale;
 using ImGuiFullscreen::LoadTexture;
@@ -2917,13 +2917,8 @@ void FullscreenUI::DrawSettingsWindow()
 	EndFullscreenWindow();
 
 	// we have to do this here, because otherwise it uses target, and jumps a frame later.
-	if (IsFocusResetQueued())
-		if (FocusResetType focus_reset = GetQueuedFocusResetType(); focus_reset != FocusResetType::None &&
-																	focus_reset != FocusResetType::PopupOpened &&
-																	focus_reset != FocusResetType::PopupClosed)
-		{
+			if (IsFocusResetFromWindowChange())
 			ImGui::SetNextWindowScroll(ImVec2(0.0f, 0.0f));
-		}
 
 	if (BeginFullscreenWindow(
 			ImVec2(0.0f, heading_size.y),
