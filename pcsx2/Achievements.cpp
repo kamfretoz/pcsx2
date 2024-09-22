@@ -44,6 +44,7 @@
 #include <limits>
 #include <optional>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #ifdef ENABLE_RAINTEGRATION
@@ -132,6 +133,7 @@ namespace Achievements
 	static void BeginLoadGame();
 	static void UpdateGameSummary();
 	static void DownloadImage(std::string url, std::string cache_filename);
+	static void UpdateGlyphRanges();
 
 	// Size of the EE physical memory exposed to RetroAchievements.
 	static u32 GetExposedEEMemorySize();
@@ -343,6 +345,91 @@ void Achievements::DownloadImage(std::string url, std::string cache_filename)
 	};
 
 	s_http_downloader->CreateRequest(std::move(url), std::move(callback));
+}
+
+void Achievements::UpdateGlyphRanges()
+{
+	// To avoid rasterizing all emoji fonts, we get the set of used glyphs in the emoji range for all strings in the
+	// current game's achievement data.
+	using CodepointSet = std::unordered_set<ImGuiManager::WCharType>;
+	CodepointSet codepoints;
+	static constexpr auto add_string = [](const std::string_view str, CodepointSet& codepoints) {
+		char32_t codepoint;
+		for (size_t offset = 0; offset < str.length();)
+		{
+			offset += StringUtil::DecodeUTF8(str, offset, &codepoint);
+			// Basic Latin + Latin Supplement always included.
+			if (codepoint != StringUtil::UNICODE_REPLACEMENT_CHARACTER && codepoint >= 0x2000)
+				codepoints.insert(static_cast<ImGuiManager::WCharType>(codepoint));
+		}
+	};
+	if (rc_client_has_rich_presence(s_client))
+	{
+		std::vector<const char*> rp_strings;
+		for (;;)
+		{
+			rp_strings.resize(std::max<size_t>(rp_strings.size() * 2, 512));
+			size_t count;
+			const int err = rc_client_get_rich_presence_strings(s_client, rp_strings.data(), rp_strings.size(), &count);
+			if (err == RC_INSUFFICIENT_BUFFER)
+				continue;
+			else if (err != RC_OK)
+				rp_strings.clear();
+			else
+				rp_strings.resize(count);
+			break;
+		}
+		for (const char* str : rp_strings)
+			add_string(str, codepoints);
+	}
+	if (rc_client_has_achievements(s_client))
+	{
+		rc_client_achievement_list_t* const achievements =
+			rc_client_create_achievement_list(s_client, RC_CLIENT_ACHIEVEMENT_CATEGORY_CORE_AND_UNOFFICIAL, 0);
+		if (achievements)
+		{
+			for (u32 i = 0; i < achievements->num_buckets; i++)
+			{
+				const rc_client_achievement_bucket_t& bucket = achievements->buckets[i];
+				for (u32 j = 0; j < bucket.num_achievements; j++)
+				{
+					const rc_client_achievement_t* achievement = bucket.achievements[j];
+					if (achievement->title)
+						add_string(achievement->title, codepoints);
+					if (achievement->description)
+						add_string(achievement->description, codepoints);
+				}
+			}
+			rc_client_destroy_achievement_list(achievements);
+		}
+	}
+	if (rc_client_has_leaderboards(s_client))
+	{
+		rc_client_leaderboard_list_t* const leaderboards =
+			rc_client_create_leaderboard_list(s_client, RC_CLIENT_LEADERBOARD_LIST_GROUPING_NONE);
+		if (leaderboards)
+		{
+			for (u32 i = 0; i < leaderboards->num_buckets; i++)
+			{
+				const rc_client_leaderboard_bucket_t& bucket = leaderboards->buckets[i];
+				for (u32 j = 0; j < bucket.num_leaderboards; j++)
+				{
+					const rc_client_leaderboard_t* leaderboard = bucket.leaderboards[j];
+					if (leaderboard->title)
+						add_string(leaderboard->title, codepoints);
+					if (leaderboard->description)
+						add_string(leaderboard->description, codepoints);
+				}
+			}
+			rc_client_destroy_leaderboard_list(leaderboards);
+		}
+	}
+	std::vector<ImGuiManager::WCharType> sorted_codepoints;
+	sorted_codepoints.reserve(codepoints.size());
+	sorted_codepoints.insert(sorted_codepoints.begin(), codepoints.begin(), codepoints.end());
+	std::sort(sorted_codepoints.begin(), sorted_codepoints.end());
+	// Compact codepoints to ranges.
+	ImGuiManager::SetEmojiFontRange(ImGuiManager::CompactFontRange(sorted_codepoints));
 }
 
 bool Achievements::IsActive()
@@ -583,6 +670,7 @@ bool Achievements::Shutdown(bool allow_cancel)
 	DisableHardcoreMode();
 	ClearGameInfo();
 	ClearGameHash();
+	UpdateGlyphRanges();
 
 	if (s_login_request)
 	{
@@ -954,6 +1042,9 @@ void Achievements::ClientLoadGameCallback(int result, const char* error_message,
 	s_game_icon = {};
 	s_game_icon_url = {};
 
+	// update ranges before initializing fsui
+	UpdateGlyphRanges();
+
 	// ensure fullscreen UI is ready for notifications
 	MTGS::RunOnGSThread(&ImGuiManager::InitializeFullscreenUI);
 
@@ -1075,7 +1166,10 @@ void Achievements::HandleResetEvent(const rc_client_event_t* event)
 	rc_client_reset(s_client);
 
 	if (HasActiveGame())
+	{
 		UpdateGameSummary();
+		UpdateGlyphRanges();
+	}
 }
 
 void Achievements::HandleUnlockEvent(const rc_client_event_t* event)

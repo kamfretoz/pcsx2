@@ -17,6 +17,9 @@ namespace ImGuiManager
 {
 	using WCharType = u32;
 
+	/// Returns a compacted font range, with adjacent glyphs merged into one pair.
+	std::vector<WCharType> CompactFontRange(std::span<const WCharType> range);
+
 	/// Sets the path to the font to use. Empty string means to use the default.
 	void SetFontPathAndRange(std::string path, std::vector<WCharType> range);
 
