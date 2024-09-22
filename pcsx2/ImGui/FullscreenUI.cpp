@@ -44,6 +44,7 @@
 
 #include "IconsFontAwesome5.h"
 #include "IconsPromptFont.h"
+#include "IconsEmoji.h"
 #include "imgui.h"
 #include "imgui_internal.h"
 
@@ -3239,7 +3240,7 @@ void FullscreenUI::DrawInterfaceSettingsPage()
 		FSUI_CSTR("Displays warnings when settings are enabled which may break games."), "EmuCore", "WarnAboutUnsafeSettings", true);
 
 	MenuHeading(FSUI_CSTR("Operations"));
-	if (MenuButton(FSUI_ICONSTR(ICON_FA_DUMPSTER_FIRE, "Reset Settings"),
+	if (MenuButton(FSUI_ICONSTR(ICON_EMOJI_FIRE, "Reset Settings"),
 			FSUI_CSTR("Resets configuration to defaults (excluding controller settings)."), !IsEditingGameSettings(bsi)))
 	{
 		DoResetSettings();

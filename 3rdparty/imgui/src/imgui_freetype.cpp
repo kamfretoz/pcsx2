@@ -919,7 +919,6 @@ static FT_Error ImGuiLunasvgPortPresetSlot(FT_GlyphSlot slot, FT_Bool cache, FT_
         lunasvg_document_destroy(state->svg);
     state->svg = lunasvg_document_load_from_data(document->svg_document, document->svg_document_length);
 
-    state->svg = lunasvg::Document::loadFromData((const char*)document->svg_document, document->svg_document_length);
     if (state->svg == nullptr)
     {
         state->err = FT_Err_Invalid_SVG_Document;
