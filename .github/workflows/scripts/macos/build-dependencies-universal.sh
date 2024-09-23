@@ -265,15 +265,6 @@ cmake --build build --parallel
 cmake --install build
 cd ..
 
-echo "Building lunasvg..."
-rm -fr "lunasvg-$LUNASVG"
-tar xf "lunasvg-$LUNASVG.tar.gz"
-cd "lunasvg-$LUNASVG"
-cmake "${CMAKE_COMMON[@]}" "$CMAKE_ARCH_UNIVERSAL" -DBUILD_SHARED_LIBS=ON -DLUNASVG_BUILD_EXAMPLES=OFF -B build -G Ninja
-cmake --build build --parallel
-ninja -C build install
-cd ..
-
 # MoltenVK already builds universal binaries, nothing special to do here.
 echo "Installing MoltenVK..."
 rm -fr "MoltenVK-${MOLTENVK}"

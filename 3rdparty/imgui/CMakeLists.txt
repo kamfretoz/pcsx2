@@ -5,6 +5,8 @@ add_library(imgui
 	include/imgui_internal.h
 	include/imgui_stdlib.h
 	include/imstb_textedit.h
+	include/lunasvg.h
+	include/lunasvg_c.h
 	src/imgui.cpp
 	src/imgui_demo.cpp
 	src/imgui_draw.cpp
