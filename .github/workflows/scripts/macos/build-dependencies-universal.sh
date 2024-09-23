@@ -1,5 +1,6 @@
 #!/bin/bash
 
+
 set -e
 
 merge_binaries() {
