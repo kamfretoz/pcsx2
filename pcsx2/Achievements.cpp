@@ -2398,8 +2398,8 @@ void Achievements::DrawAchievementsWindow()
 			TRANSLATE_NOOP("Achievements", "Almost There"),
 		};
 
-		ImGuiFullscreen::BeginMenuButtons();
 		ImGuiFullscreen::ResetFocusHere();
+		ImGuiFullscreen::BeginMenuButtons();
 
 		for (u32 bucket_type : {RC_CLIENT_ACHIEVEMENT_BUCKET_ACTIVE_CHALLENGE, RC_CLIENT_ACHIEVEMENT_BUCKET_RECENTLY_UNLOCKED,
 				 RC_CLIENT_ACHIEVEMENT_BUCKET_UNLOCKED, RC_CLIENT_ACHIEVEMENT_BUCKET_ALMOST_THERE, RC_CLIENT_ACHIEVEMENT_BUCKET_LOCKED,
@@ -2747,10 +2747,10 @@ void Achievements::DrawLeaderboardsWindow()
 					ImGui::IsKeyPressed(ImGuiKey_NavGamepadTweakSlow, false) ||
 					ImGui::IsKeyPressed(ImGuiKey_LeftArrow, false) || ImGui::IsKeyPressed(ImGuiKey_GamepadDpadRight, false) ||
 					ImGui::IsKeyPressed(ImGuiKey_NavGamepadTweakFast, false) || ImGui::IsKeyPressed(ImGuiKey_RightArrow, false))
-					{
-						s_is_showing_all_leaderboard_entries = !s_is_showing_all_leaderboard_entries;
-						ImGuiFullscreen::QueueResetFocus(ImGuiFullscreen::FocusResetType::Other);
-					}
+				{
+					s_is_showing_all_leaderboard_entries = !s_is_showing_all_leaderboard_entries;
+					ImGuiFullscreen::QueueResetFocus(ImGuiFullscreen::FocusResetType::Other);
+				}
 
 				for (const bool show_all : {false, true})
 				{
@@ -2828,6 +2828,7 @@ void Achievements::DrawLeaderboardsWindow()
 				ImVec2(display_size.x, display_size.y - heading_height - LayoutScale(ImGuiFullscreen::LAYOUT_FOOTER_HEIGHT)),
 				"leaderboards", background, 0.0f, ImVec2(ImGuiFullscreen::LAYOUT_MENU_WINDOW_X_PADDING, 0.0f), 0))
 		{
+			ImGuiFullscreen::ResetFocusHere();
 			ImGuiFullscreen::BeginMenuButtons();
 
 			for (u32 bucket_index = 0; bucket_index < s_leaderboard_list->num_buckets; bucket_index++)
@@ -2848,13 +2849,19 @@ void Achievements::DrawLeaderboardsWindow()
 				ImVec2(display_size.x, display_size.y - heading_height - LayoutScale(ImGuiFullscreen::LAYOUT_FOOTER_HEIGHT)),
 				"leaderboard", background, 0.0f, ImVec2(ImGuiFullscreen::LAYOUT_MENU_WINDOW_X_PADDING, 0.0f), 0))
 		{
+			// Defer focus reset until loading finishes.
+			if (!s_is_showing_all_leaderboard_entries ||
+				(ImGuiFullscreen::IsFocusResetFromWindowChange() && !s_leaderboard_entry_lists.empty()))
+			{
+				ImGuiFullscreen::ResetFocusHere();
+			}
+
 			ImGuiFullscreen::BeginMenuButtons();
 
 			if (!s_is_showing_all_leaderboard_entries)
 			{
 				if (s_leaderboard_nearby_entries)
 				{
-					ImGuiFullscreen::ResetFocusHere();
 					for (u32 i = 0; i < s_leaderboard_nearby_entries->num_entries; i++)
 					{
 						DrawLeaderboardEntry(s_leaderboard_nearby_entries->entries[i],
@@ -2876,8 +2883,6 @@ void Achievements::DrawLeaderboardsWindow()
 			}
 			else
 			{
-				if (ImGuiFullscreen::IsFocusResetFromWindowChange() && !s_leaderboard_entry_lists.empty())
-					ImGuiFullscreen::ResetFocusHere();
 				for (const rc_client_leaderboard_entry_list_t* list : s_leaderboard_entry_lists)
 				{
 					for (u32 i = 0; i < list->num_entries; i++)

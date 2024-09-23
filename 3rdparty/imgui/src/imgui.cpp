@@ -13381,6 +13381,8 @@ static void ImGui::NavUpdateCancelRequest()
         // Close open popup/menu
         ClosePopupToLevel(g.OpenPopupStack.Size - 1, true);
     }
+#if 0
+    // PCSX2: We want to keep nav active, since we handle menu exits ourselves.
     else
     {
         // Clear NavLastId for popups but keep it for regular child window so we can leave one and come back where we were
@@ -13395,6 +13397,7 @@ static void ImGui::NavUpdateCancelRequest()
         if (g.IO.ConfigNavEscapeClearFocusWindow)
             FocusWindow(NULL);
     }
+#endif
 }
 
 // Handle PageUp/PageDown/Home/End keys

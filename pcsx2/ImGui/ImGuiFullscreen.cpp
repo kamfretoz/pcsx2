@@ -568,12 +568,16 @@ bool ImGuiFullscreen::ResetFocusHere()
 	if (ImGui::FindBlockingModal(window))
 		return false;
 
-
-	// Only fully reset the window on window change, that way setting page changes don't spend a frame without focus.
-	if (s_focus_reset_queued == FocusResetType::ViewChanged)
-		window->LastFrameActive = 0;
-
 	s_focus_reset_queued = FocusResetType::None;
+
+	// Set the flag that we drew an active/hovered item active for a frame, because otherwise there's one frame where
+	// there'll be no frame drawn, which will cancel the animation. Also set the appearing flag, so that the default
+	// focus set does actually go through.
+	if (!GImGui->NavDisableHighlight && GImGui->NavDisableMouseHover)
+	{
+		window->Appearing = true;
+		s_has_hovered_menu_item = s_had_hovered_menu_item;
+	}
 
 	ImGui::SetWindowFocus();
 	ImGui::NavInitWindow(window, true);
@@ -589,8 +593,7 @@ bool ImGuiFullscreen::IsFocusResetQueued()
 
 bool ImGuiFullscreen::IsFocusResetFromWindowChange()
 {
-	return (s_focus_reset_queued != FocusResetType::None && s_focus_reset_queued != FocusResetType::PopupOpened &&
-			s_focus_reset_queued != FocusResetType::PopupClosed);
+	return (s_focus_reset_queued != FocusResetType::None && s_focus_reset_queued != FocusResetType::PopupClosed);
 }
 
 ImGuiFullscreen::FocusResetType ImGuiFullscreen::GetQueuedFocusResetType()
@@ -1984,6 +1987,9 @@ void ImGuiFullscreen::CloseFileSelector()
 	if (!s_file_selector_open)
 		return;
 
+	if (ImGui::IsPopupOpen(s_file_selector_title.c_str(), 0))
+		ImGui::ClosePopupToLevel(GImGui->OpenPopupStack.Size - 1, true);
+
 	s_file_selector_open = false;
 	s_file_selector_directory = false;
 	std::string().swap(s_file_selector_title);
@@ -2022,8 +2028,8 @@ void ImGuiFullscreen::DrawFileSelector()
 	{
 		ImGui::PushStyleColor(ImGuiCol_Text, UIBackgroundTextColor);
 
-		BeginMenuButtons();
 		ResetFocusHere();
+		BeginMenuButtons();
 
 		if (!s_file_selector_current_directory.empty())
 		{
@@ -2120,6 +2126,9 @@ void ImGuiFullscreen::CloseChoiceDialog()
 	if (!s_choice_dialog_open)
 		return;
 
+	if (ImGui::IsPopupOpen(s_choice_dialog_title.c_str(), 0))
+		ImGui::ClosePopupToLevel(GImGui->OpenPopupStack.Size - 1, true);
+
 	s_choice_dialog_open = false;
 	s_choice_dialog_checkable = false;
 	std::string().swap(s_choice_dialog_title);
@@ -2151,7 +2160,7 @@ void ImGuiFullscreen::DrawChoiceDialog()
 		ImGuiCond_Always, ImVec2(0.5f, 0.5f));
 	ImGui::OpenPopup(s_choice_dialog_title.c_str());
 
-	bool is_open = !WantsToCloseMenu();
+	bool is_open = true;
 	s32 choice = -1;
 
 	if (ImGui::BeginPopupModal(
@@ -2159,8 +2168,8 @@ void ImGuiFullscreen::DrawChoiceDialog()
 	{
 		ImGui::PushStyleColor(ImGuiCol_Text, UIBackgroundTextColor);
 
-		BeginMenuButtons();
 		ResetFocusHere();
+		BeginMenuButtons();
 
 		if (s_choice_dialog_checkable)
 		{
@@ -2203,14 +2212,12 @@ void ImGuiFullscreen::DrawChoiceDialog()
 
 		ImGui::EndPopup();
 	}
-	else
-	{
-		is_open = false;
-	}
 
 	ImGui::PopStyleColor(3);
 	ImGui::PopStyleVar(3);
 	ImGui::PopFont();
+
+	is_open &= !WantsToCloseMenu();
 
 	if (choice >= 0)
 	{
@@ -2251,6 +2258,9 @@ void ImGuiFullscreen::DrawInputDialog()
 {
 	if (!s_input_dialog_open)
 		return;
+
+	if (ImGui::IsPopupOpen(s_input_dialog_title.c_str(), 0))
+		ImGui::ClosePopupToLevel(GImGui->OpenPopupStack.Size - 1, true);
 
 	ImGui::SetNextWindowSize(LayoutScale(700.0f, 0.0f));
 	ImGui::SetNextWindowPos((ImGui::GetIO().DisplaySize - LayoutScale(0.0f, LAYOUT_FOOTER_HEIGHT)) * 0.5f,
@@ -2389,6 +2399,10 @@ void ImGuiFullscreen::CloseMessageDialog()
 	if (!s_message_dialog_open)
 		return;
 
+	if (ImGui::IsPopupOpen(s_message_dialog_title.c_str(), 0))
+		ImGui::ClosePopupToLevel(GImGui->OpenPopupStack.Size - 1, true);
+
+
 	s_message_dialog_open = false;
 	s_message_dialog_title = {};
 	s_message_dialog_message = {};
@@ -2424,8 +2438,8 @@ void ImGuiFullscreen::DrawMessageDialog()
 
 	if (ImGui::BeginPopupModal(win_id, &is_open, flags))
 	{
-		BeginMenuButtons();
 		ResetFocusHere();
+		BeginMenuButtons();
 
 		ImGui::TextWrapped("%s", s_message_dialog_message.c_str());
 		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + LayoutScale(20.0f));
