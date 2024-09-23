@@ -962,10 +962,10 @@ void SaveStateSelectorUI::Draw()
 
 	const auto& io = ImGui::GetIO();
 	const float scale = ImGuiManager::GetGlobalScale();
-	const float width = (600.0f * scale);
-	const float height = (430.0f * scale);
+	const float width = (650.0f * scale);
+	const float height = (450.0f * scale);
 
-	const float padding_and_rounding = 10.0f * scale;
+	const float padding_and_rounding = 18.0f * scale;
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, padding_and_rounding);
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(padding_and_rounding, padding_and_rounding));
 	ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.11f, 0.15f, 0.17f, 0.8f));
@@ -978,8 +978,8 @@ void SaveStateSelectorUI::Draw()
 				ImGuiWindowFlags_NoScrollbar))
 	{
 		// Leave 2 lines for the legend
-		const float legend_margin = ImGui::GetFontSize() * 3.0f + ImGui::GetStyle().ItemSpacing.y * 3.0f;
-		const float padding = 10.0f * scale;
+		const float legend_margin = ImGui::GetFontSize() * 2.0f + ImGui::GetStyle().ItemSpacing.y * 3.0f;
+		const float padding = 12.0f * scale;
 
 		ImGui::BeginChild("##item_list", ImVec2(0, -legend_margin), false,
 			ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoTitleBar |
