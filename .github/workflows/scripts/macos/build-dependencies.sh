@@ -93,7 +93,7 @@ curl -L \
 	-O "https://download.qt.io/official_releases/qt/${QT%.*}/$QT/submodules/qtsvg-everywhere-src-$QT.tar.xz" \
 	-O "https://download.qt.io/official_releases/qt/${QT%.*}/$QT/submodules/qttools-everywhere-src-$QT.tar.xz" \
 	-O "https://download.qt.io/official_releases/qt/${QT%.*}/$QT/submodules/qttranslations-everywhere-src-$QT.tar.xz" \
-	-o "lunasvg-$LUNASVG.tar.gz" "https://github.com/JordanTheToast/lunasvg/archive/$LUNASVG.tar.gz" \
+	-o "lunasvg-$LUNASVG.tar.gz" "https://github.com/JordanTheToaster/lunasvg/archive/$LUNASVG.tar.gz" \
 	-o "shaderc-$SHADERC.tar.gz" "https://github.com/google/shaderc/archive/refs/tags/v$SHADERC.tar.gz" \
 	-o "shaderc-glslang-$SHADERC_GLSLANG.tar.gz" "https://github.com/KhronosGroup/glslang/archive/$SHADERC_GLSLANG.tar.gz" \
 	-o "shaderc-spirv-headers-$SHADERC_SPIRVHEADERS.tar.gz" "https://github.com/KhronosGroup/SPIRV-Headers/archive/$SHADERC_SPIRVHEADERS.tar.gz" \
@@ -209,9 +209,9 @@ echo "Building lunasvg..."
 rm -fr "lunasvg-$LUNASVG"
 tar xf "lunasvg-$LUNASVG.tar.gz"
 cd "lunasvg-$LUNASVG"
-cmake "${CMAKE_COMMON[@]}" "$CMAKE_ARCH_UNIVERSAL" -DBUILD_SHARED_LIBS=ON -DLUNASVG_BUILD_EXAMPLES=OFF -B build -G Ninja
+cmake "${CMAKE_COMMON[@]}" "$CMAKE_ARCH_UNIVERSAL" -DBUILD_SHARED_LIBS=ON -DLUNASVG_BUILD_EXAMPLES=OFF -B build
 cmake --build build --parallel
-ninja -C build install
+cmake --install build
 cd ..
 
 # MoltenVK already builds universal binaries, nothing special to do here.
