@@ -137,8 +137,8 @@ using ImGuiFullscreen::GetCachedTexture;
 using ImGuiFullscreen::GetCachedTextureAsync;
 using ImGuiFullscreen::GetPlaceholderTexture;
 using ImGuiFullscreen::HorizontalMenuItem;
-using ImGuiFullscreen::IsFocusResetQueued;
 using ImGuiFullscreen::IsFocusResetFromWindowChange;
+using ImGuiFullscreen::IsFocusResetQueued;
 using ImGuiFullscreen::IsGamepadInputSource;
 using ImGuiFullscreen::LayoutScale;
 using ImGuiFullscreen::LoadTexture;
@@ -2891,8 +2891,8 @@ void FullscreenUI::DrawSettingsWindow()
 	EndFullscreenWindow();
 
 	// we have to do this here, because otherwise it uses target, and jumps a frame later.
-			if (IsFocusResetFromWindowChange())
-			ImGui::SetNextWindowScroll(ImVec2(0.0f, 0.0f));
+	if (IsFocusResetFromWindowChange())
+		ImGui::SetNextWindowScroll(ImVec2(0.0f, 0.0f));
 
 	if (BeginFullscreenWindow(
 			ImVec2(0.0f, heading_size.y),
@@ -5083,9 +5083,9 @@ void FullscreenUI::DrawPauseMenu(MainWindowType type)
 			3, // Achievements
 		};
 
+		ResetFocusHere();
 		BeginMenuButtons(submenu_item_count[static_cast<u32>(s_current_pause_submenu)], 1.0f, ImGuiFullscreen::LAYOUT_MENU_BUTTON_X_PADDING,
 			ImGuiFullscreen::LAYOUT_MENU_BUTTON_Y_PADDING, ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY);
-		ResetFocusHere();
 
 		switch (s_current_pause_submenu)
 		{
@@ -5317,6 +5317,7 @@ bool FullscreenUI::OpenSaveStateSelector(bool is_loading)
 	if (PopulateSaveStateListEntries(s_current_game_title.c_str(), s_current_disc_serial.c_str(), s_current_disc_crc) > 0)
 	{
 		s_save_state_selector_open = true;
+		QueueResetFocus(FocusResetType::PopupOpened);
 		return true;
 	}
 
@@ -5326,6 +5327,9 @@ bool FullscreenUI::OpenSaveStateSelector(bool is_loading)
 
 void FullscreenUI::CloseSaveStateSelector()
 {
+	if (s_save_state_selector_open)
+		QueueResetFocus(FocusResetType::PopupClosed);
+
 	ClearSaveStateEntryList();
 	s_save_state_selector_open = false;
 	s_save_state_selector_submenu_index = -1;
@@ -5374,14 +5378,13 @@ void FullscreenUI::DrawSaveStateSelector(bool is_loading)
 
 	ImGui::PushStyleColor(ImGuiCol_ChildBg, ModAlpha(UIPrimaryColor, 0.9f));
 
+	bool closed = false;
+	bool was_close_not_back = false;
 	if (ImGui::BeginChild("state_titlebar", heading_size, ImGuiChildFlags_NavFlattened, 0))
 	{
 		BeginNavBar();
 		if (NavButton(ICON_PF_BACKWARD, true, true))
-		{
-			CloseSaveStateSelector();
-			ReturnToPreviousWindow();
-		}
+			closed = true;
 
 		NavTitle(is_loading ? FSUI_CSTR("Load State") : FSUI_CSTR("Save State"));
 		EndNavBar();
@@ -5392,11 +5395,13 @@ void FullscreenUI::DrawSaveStateSelector(bool is_loading)
 	ImGui::PushStyleColor(ImGuiCol_ChildBg, ModAlpha(UIBackgroundColor, 0.9f));
 	ImGui::SetCursorPos(ImVec2(0.0f, heading_size.y));
 
-	bool close_handled = false;
-	if (s_save_state_selector_open &&
-		ImGui::BeginChild("state_list", ImVec2(io.DisplaySize.x, io.DisplaySize.y - LayoutScale(LAYOUT_FOOTER_HEIGHT) - heading_size.y),
+	if (IsFocusResetFromWindowChange())
+		ImGui::SetNextWindowScroll(ImVec2(0.0f, 0.0f));
+
+	if (ImGui::BeginChild("state_list", ImVec2(io.DisplaySize.x, io.DisplaySize.y - LayoutScale(LAYOUT_FOOTER_HEIGHT) - heading_size.y),
 			ImGuiChildFlags_NavFlattened, 0))
 	{
+		ResetFocusHere();
 		BeginMenuButtons();
 
 		const ImGuiStyle& style = ImGui::GetStyle();
@@ -5420,9 +5425,6 @@ void FullscreenUI::DrawSaveStateSelector(bool is_loading)
 		ImGui::SetCursorPos(ImVec2(start_x, 0.0f));
 		for (u32 i = 0; i < s_save_state_selector_slots.size();)
 		{
-			if (i == 0)
-				ResetFocusHere();
-
 			if (static_cast<s32>(i) == s_save_state_selector_submenu_index)
 			{
 				SaveStateListEntry& entry = s_save_state_selector_slots[i];
@@ -5447,9 +5449,8 @@ void FullscreenUI::DrawSaveStateSelector(bool is_loading)
 				ImGui::SetNextWindowPos(ImGui::GetIO().DisplaySize * 0.5f, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
 				ImGui::OpenPopup(entry.title.c_str());
 
-				// don't let the back button flow through to the main window
-				bool submenu_open = !WantsToCloseMenu();
-				close_handled ^= submenu_open;
+				if (!is_open)
+					s_save_state_selector_submenu_index = -1;
 
 				bool closed = false;
 				if (ImGui::BeginPopupModal(
@@ -5471,6 +5472,7 @@ void FullscreenUI::DrawSaveStateSelector(bool is_loading)
 						CloseSaveStateSelector();
 						ReturnToMainWindow();
 						closed = true;
+						was_close_not_back = true;
 					}
 
 					if (ActiveButton(FSUI_ICONSTR(ICON_FA_TRASH, "Delete Save"), false, true, LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY))
@@ -5494,6 +5496,7 @@ void FullscreenUI::DrawSaveStateSelector(bool is_loading)
 								CloseSaveStateSelector();
 								ReturnToMainWindow();
 								closed = true;
+								was_close_not_back = true;
 							}
 							else
 							{
@@ -5630,26 +5633,29 @@ void FullscreenUI::DrawSaveStateSelector(bool is_loading)
 	ImGui::EndPopup();
 	ImGui::PopStyleVar(5);
 
-	if (!close_handled && WantsToCloseMenu())
+	if (IsGamepadInputSource())
 	{
-		CloseSaveStateSelector();
-		ReturnToPreviousWindow();
+		SetFullscreenFooterText(std::array{std::make_pair(ICON_PF_XBOX_DPAD, FSUI_VSTR("Select State")),
+			std::make_pair(ICON_PF_BUTTON_Y, FSUI_VSTR("Delete State")),
+			std::make_pair(ICON_PF_BUTTON_A, FSUI_VSTR("Load State")),
+			std::make_pair(ICON_PF_BUTTON_B, FSUI_VSTR("Cancel"))});
 	}
 	else
 	{
-		if (IsGamepadInputSource())
-		{
-			SetFullscreenFooterText(std::array{std::make_pair(ICON_PF_XBOX_DPAD, FSUI_VSTR("Select State")),
-				std::make_pair(ICON_PF_BUTTON_Y, FSUI_VSTR("Delete State")),
-				std::make_pair(ICON_PF_BUTTON_A, FSUI_VSTR("Load State")),
-				std::make_pair(ICON_PF_BUTTON_B, FSUI_VSTR("Cancel"))});
-		}
-		else
 		{
 			SetFullscreenFooterText(std::array{
-				std::make_pair(ICON_PF_ARROW_UP ICON_PF_ARROW_DOWN ICON_PF_ARROW_LEFT ICON_PF_ARROW_RIGHT, FSUI_VSTR("Select State")),
+				std::make_pair(ICON_PF_ARROW_UP ICON_PF_ARROW_DOWN ICON_PF_ARROW_LEFT ICON_PF_ARROW_RIGHT,
+					FSUI_VSTR("Select State")),
 				std::make_pair(ICON_PF_F1, FSUI_VSTR("Delete State")), std::make_pair(ICON_PF_ENTER, FSUI_VSTR("Load State")),
 				std::make_pair(ICON_PF_ESC, FSUI_VSTR("Cancel"))});
+		}
+		if (WantsToCloseMenu() || closed)
+		{
+			CloseSaveStateSelector();
+			if (was_close_not_back)
+				ReturnToMainWindow();
+			else if (s_current_main_window != MainWindowType::GameList)
+				ReturnToPreviousWindow();
 		}
 	}
 }
@@ -5666,6 +5672,7 @@ bool FullscreenUI::OpenLoadStateSelectorForGameResume(const GameList::Entry* ent
 	s_save_state_selector_loading = true;
 	s_save_state_selector_open = true;
 	s_save_state_selector_resuming = true;
+	QueueResetFocus(FocusResetType::PopupOpened);
 	return true;
 }
 
@@ -5961,7 +5968,12 @@ void FullscreenUI::DrawGameList(const ImVec2& heading_size)
 	if (!AreAnyDialogsOpen() && WantsToCloseMenu())
 		ReturnToPreviousWindow();
 
+	auto game_list_lock = GameList::GetLock();
 	const GameList::Entry* selected_entry = nullptr;
+	PopulateGameListEntryList();
+
+	if (IsFocusResetFromWindowChange())
+		ImGui::SetNextWindowScroll(ImVec2(0.0f, 0.0f));
 
 	if (BeginFullscreenColumnWindow(0.0f, -530.0f, "game_list_entries"))
 	{
@@ -6143,6 +6155,9 @@ void FullscreenUI::DrawGameList(const ImVec2& heading_size)
 
 void FullscreenUI::DrawGameGrid(const ImVec2& heading_size)
 {
+	if (IsFocusResetFromWindowChange())
+		ImGui::SetNextWindowScroll(ImVec2(0.0f, 0.0f));
+
 	ImGuiIO& io = ImGui::GetIO();
 	if (!BeginFullscreenWindow(
 			ImVec2(0.0f, heading_size.y),
