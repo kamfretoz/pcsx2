@@ -579,7 +579,7 @@ bool FullscreenUI::Initialize()
 	if (s_tried_to_initialize)
 		return false;
 
-	ImGuiFullscreen::SetTheme(Host::GetBaseBoolSettingValue("UI", "UseLightFullscreenUITheme", false));
+	ImGuiFullscreen::SetTheme(Host::GetBaseStringSettingValue("UI", "FullscreenTheme", "Dark"));
 	ImGuiFullscreen::UpdateLayoutScale();
 
 	if (!ImGuiManager::AddFullscreenFontsIfMissing() || !ImGuiFullscreen::Initialize("fullscreenui/placeholder.png") || !LoadResources())
@@ -631,6 +631,8 @@ void FullscreenUI::CheckForConfigChanges(const Pcsx2Config& old_config)
 {
 	if (!IsInitialized())
 		return;
+
+	ImGuiFullscreen::SetTheme(Host::GetBaseStringSettingValue("UI", "FullscreenTheme", "Dark"));
 
 	// If achievements got disabled, we might have the menu open...
 	// That means we're going to be reaching achievement state.
@@ -3139,12 +3141,37 @@ void FullscreenUI::DrawSummarySettingsPage()
 
 void FullscreenUI::DrawInterfaceSettingsPage()
 {
+	static constexpr const char* s_theme_name[] = {
+		FSUI_NSTR("Dark"),
+		FSUI_NSTR("Light"),
+		FSUI_NSTR("AMOLED"),
+		FSUI_NSTR("Cobalt Sky"),
+		FSUI_NSTR("Grey Matter"),
+		FSUI_NSTR("Untouched Lagoon"),
+		FSUI_NSTR("Baby Pastel"),
+		FSUI_NSTR("Pizza Time!"),
+	};
+
+	static constexpr const char* s_theme_value[] = {
+		"Dark",
+		"Light",
+		"AMOLED",
+		"CobaltSky",
+		"GreyMatter",
+		"UntouchedLagoon",
+		"BabyPastel",
+		"PizzaBrown",
+	};
+
 	SettingsInterface* bsi = GetEditingSettingsInterface();
 
 	BeginMenuButtons();
 
 	MenuHeading(FSUI_CSTR("Behaviour"));
 
+	DrawStringListSetting(bsi, FSUI_ICONSTR(ICON_FA_PAINT_BRUSH, "Theme"), 
+	FSUI_CSTR("Selects the color style to be used for Big Picture Mode."),
+		"UI", "FullscreenTheme", "Dark", s_theme_name, s_theme_value, std::size(s_theme_name), true);
 	DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_PF_SNOOZE, "Inhibit Screensaver"),
 		FSUI_CSTR("Prevents the screen saver from activating and the host from sleeping while emulation is running."), "EmuCore",
 		"InhibitScreensaver", true);
@@ -3172,11 +3199,6 @@ void FullscreenUI::DrawInterfaceSettingsPage()
 	DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_FA_INFO_CIRCLE, "Use Save State Selector"),
 		FSUI_CSTR("Show a save state selector UI when switching slots instead of showing a notification bubble."),
 		"EmuCore", "UseSavestateSelector", true);
-	if (DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_FA_LIGHTBULB, "Use Light Theme"),
-			FSUI_CSTR("Uses a light coloured theme instead of the default dark theme."), "UI", "UseLightFullscreenUITheme", false))
-	{
-		ImGuiFullscreen::SetTheme(bsi->GetBoolValue("UI", "UseLightFullscreenUITheme", false));
-	}
 
 	MenuHeading(FSUI_CSTR("Game Display"));
 	DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_FA_TV, "Start Fullscreen"),

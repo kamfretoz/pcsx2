@@ -226,17 +226,17 @@ void QtHost::SetStyleFromSettings()
 		const QColor black(25, 25, 25);
 		const QColor redpinkish(200, 75, 132);
 		const QColor pink(255, 174, 201);
-		const QColor brightPink(255, 230, 255);
+		const QColor darkerPink(235, 160, 185);
 		const QColor congoPink(255, 127, 121);
 		const QColor blue(221, 225, 239);
 
 		QPalette babyPastelPalette;
 		babyPastelPalette.setColor(QPalette::Window, pink);
 		babyPastelPalette.setColor(QPalette::WindowText, black);
-		babyPastelPalette.setColor(QPalette::Base, brightPink);
+		babyPastelPalette.setColor(QPalette::Base, darkerPink);
 		babyPastelPalette.setColor(QPalette::AlternateBase, blue);
 		babyPastelPalette.setColor(QPalette::ToolTipBase, pink);
-		babyPastelPalette.setColor(QPalette::ToolTipText, brightPink);
+		babyPastelPalette.setColor(QPalette::ToolTipText, darkerPink);
 		babyPastelPalette.setColor(QPalette::Text, black);
 		babyPastelPalette.setColor(QPalette::Button, pink);
 		babyPastelPalette.setColor(QPalette::ButtonText, black);
@@ -264,7 +264,7 @@ void QtHost::SetStyleFromSettings()
 		const QColor gray(128, 128, 128);
 		const QColor extr(248, 192, 88);
 		const QColor main(233, 187, 147);
-		const QColor comp(248, 230, 213);
+		const QColor comp(220, 160, 60);
 		const QColor highlight(188, 100, 60);
 
 		QPalette pizzaPalette;
