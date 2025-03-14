@@ -3168,10 +3168,10 @@ void VMManager::WarnAboutUnsafeSettings()
 			append(ICON_FA_EXCLAMATION_CIRCLE,
 				TRANSLATE_SV("VMManager", "Texture dumping is enabled, this will continually dump textures to disk."));
 		}
-		if (!EmuConfig.GS.HWMipmap)
+		if (EmuConfig.GS.HWMipmapMode != GSHWMipmapMode::Enabled && EmuConfig.GS.HWMipmapMode != GSHWMipmapMode::AllLevels)
 		{
 			append(ICON_FA_IMAGES,
-				TRANSLATE_SV("VMManager", "Mipmapping is disabled. This may break rendering in some games."));
+				TRANSLATE_SV("VMManager", "Mipmapping is not set to Enabled/All Levels. This may break rendering in some games."));
 		}
 		static bool render_change_warn = false;
 		if (EmuConfig.GS.Renderer != GSRendererType::Auto && EmuConfig.GS.Renderer != GSRendererType::SW && !render_change_warn)
