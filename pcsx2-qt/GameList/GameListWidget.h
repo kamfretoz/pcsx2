@@ -48,6 +48,7 @@ public:
 	void refresh(bool invalidate_cache);
 	void cancelRefresh();
 	void reloadThemeSpecificImages();
+	void setCustomBackground(int width, int height, bool reload);
 
 	bool isShowingGameList() const;
 	bool isShowingGameGrid() const;
@@ -114,4 +115,6 @@ private:
 	Ui::EmptyGameListWidget m_empty_ui;
 
 	GameListRefreshThread* m_refresh_thread = nullptr;
+
+	QImage m_background_image;
 };

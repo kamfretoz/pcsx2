@@ -12,6 +12,7 @@
 
 #include "common/Assertions.h"
 #include "common/Console.h"
+#include "common/Path.h"
 #include "common/StringUtil.h"
 
 #include "fmt/format.h"
@@ -245,6 +246,87 @@ void GameListWidget::initialize()
 
 	updateToolbar();
 	resizeTableViewColumnsToFit();
+	setCustomBackground(width(), height(), true);
+}
+
+static void resizeBackgroundImage(QImage* image, int expected_width, int expected_height, bool fill_with_top_left)
+{
+	const qreal dpr = image->devicePixelRatio();
+	const int dpr_expected_width = static_cast<int>(static_cast<qreal>(expected_width) * dpr);
+	const int dpr_expected_height = static_cast<int>(static_cast<qreal>(expected_height) * dpr);
+	if (image->width() == dpr_expected_width && image->height() == dpr_expected_height)
+		return;
+
+	if ((static_cast<float>(image->width()) / static_cast<float>(image->height())) >=
+		(static_cast<float>(dpr_expected_width) / static_cast<float>(dpr_expected_height)))
+	{
+		*image = image->scaledToWidth(dpr_expected_width, Qt::SmoothTransformation);
+	}
+	else
+	{
+		*image = image->scaledToHeight(dpr_expected_height, Qt::SmoothTransformation);
+	}
+
+	if (image->width() == dpr_expected_width && image->height() == dpr_expected_height)
+		return;
+
+	int xoffset = 0;
+	int yoffset = 0;
+	const int image_width = image->width();
+	const int image_height = image->height();
+	if (image_width < dpr_expected_width)
+		xoffset = static_cast<int>(static_cast<qreal>((dpr_expected_width - image_width) / 2) / dpr);
+	if (image_height < dpr_expected_height)
+		yoffset = static_cast<int>(static_cast<qreal>((dpr_expected_height - image_height) / 2) / dpr);
+
+	QImage padded_image(dpr_expected_width, dpr_expected_height, QImage::Format_ARGB32);
+	padded_image.setDevicePixelRatio(dpr);
+	if (fill_with_top_left)
+		padded_image.fill(image->pixel(0, 0));
+	else
+		padded_image.fill(Qt::transparent);
+
+	QPainter painter;
+	if (painter.begin(&padded_image))
+	{
+		painter.setCompositionMode(QPainter::CompositionMode_Source);
+		painter.drawImage(xoffset, yoffset, *image);
+		painter.end();
+	}
+
+	*image = std::move(padded_image);
+}
+
+void GameListWidget::setCustomBackground(int width, int height, bool reload)
+{
+	std::string path = Path::Combine(EmuFolders::UserResources, "background.png");
+
+	if (reload)
+	{
+		m_background_image = QImage();
+		if (!path.empty() && m_background_image.load(path.c_str()))
+			m_background_image.setDevicePixelRatio(devicePixelRatio());
+	}
+
+	if (m_background_image.isNull())
+	{
+		m_ui.stack->setPalette(palette());
+		m_table_view->setAlternatingRowColors(true);
+		return;
+	}
+
+	int widget_width = m_ui.stack->width();
+	int widget_height = m_ui.stack->height();
+
+	resizeBackgroundImage(&m_background_image, width, height, true);
+
+	if (widget_width != m_ui.stack->width() || widget_height != m_ui.stack->height())
+		return;
+
+	QPalette new_palette(m_ui.stack->palette());
+	new_palette.setBrush(QPalette::Base, QPixmap::fromImage(m_background_image));
+	m_ui.stack->setPalette(new_palette);
+	m_table_view->setAlternatingRowColors(false);
 }
 
 bool GameListWidget::isShowingGameList() const
@@ -510,6 +592,7 @@ void GameListWidget::resizeEvent(QResizeEvent* event)
 	QWidget::resizeEvent(event);
 	resizeTableViewColumnsToFit();
 	m_model->updateCacheSize(width(), height());
+	setCustomBackground(width(), height(), true);
 }
 
 void GameListWidget::resizeTableViewColumnsToFit()
