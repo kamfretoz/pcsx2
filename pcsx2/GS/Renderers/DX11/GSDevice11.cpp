@@ -48,6 +48,7 @@ GSDevice11::GSDevice11()
 	m_features.primitive_id = true;
 	m_features.texture_barrier = false;
 	m_features.multidraw_fb_copy = GSConfig.OverrideTextureBarriers != 0;
+	m_features.framebuffer_fetch = false;
 	m_features.provoking_vertex_last = false;
 	m_features.point_expand = false;
 	m_features.line_expand = false;
@@ -58,6 +59,7 @@ GSDevice11::GSDevice11()
 	m_features.stencil_buffer = true;
 	m_features.cas_sharpening = true;
 	m_features.test_and_sample_depth = true;
+	m_features.raster_order_view = false;
 }
 
 GSDevice11::~GSDevice11() = default;
@@ -97,10 +99,11 @@ bool GSDevice11::Create(GSVSyncMode vsync_mode, bool allow_present_throttle)
 
 	wil::com_ptr_nothrow<IDXGIAdapter1> dxgi_adapter = D3D::GetAdapterByName(m_dxgi_factory.get(), GSConfig.Adapter);
 
-	static constexpr std::array<D3D_FEATURE_LEVEL, 2> requested_feature_levels = {{
+	static constexpr const std::array requested_feature_levels = {
+		D3D_FEATURE_LEVEL_11_1,
 		D3D_FEATURE_LEVEL_11_0,
 		D3D_FEATURE_LEVEL_10_0,
-	}};
+	};
 
 	wil::com_ptr_nothrow<ID3D11Device> temp_dev;
 	wil::com_ptr_nothrow<ID3D11DeviceContext> temp_ctx;
@@ -565,6 +568,12 @@ void GSDevice11::Destroy()
 		m_state.dsv = nullptr;
 	}
 	m_state.cached_dsv = nullptr;
+
+	for (ID3D11UnorderedAccessView* uav : m_state.uav)
+	{
+		if (uav)
+			uav->Release();
+	}
 
 	m_shader_cache.Close();
 
@@ -1196,7 +1205,9 @@ GSTexture* GSDevice11::CreateSurface(GSTexture::Type type, int width, int height
 	switch (type)
 	{
 		case GSTexture::Type::RenderTarget:
-			desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+			desc.BindFlags = m_features.raster_order_view ?
+								 (D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS) :
+                                 (D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 			break;
 		case GSTexture::Type::DepthStencil:
 			desc.BindFlags = D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_SHADER_RESOURCE;
@@ -1766,6 +1777,10 @@ void GSDevice11::SetupPS(const PSSelector& sel, const GSHWDrawConfig::PSConstant
 		sm.AddMacro("PS_TEX_IS_FB", sel.tex_is_fb);
 		sm.AddMacro("PS_NO_COLOR", sel.no_color);
 		sm.AddMacro("PS_NO_COLOR1", sel.no_color1);
+		sm.AddMacro("PS_ROV", sel.rov);
+		sm.AddMacro("PS_ZTST", sel.ztst);
+		sm.AddMacro("PS_ZWE", sel.zwe);
+		sm.AddMacro("PS_DATE", sel.date);
 
 		wil::com_ptr_nothrow<ID3D11PixelShader> ps = m_shader_cache.GetPixelShader(m_dev.get(), m_tfx_source, sm.GetPtr(), "ps_main");
 		i = m_ps.try_emplace(sel, std::move(ps)).first;
@@ -2485,6 +2500,16 @@ void GSDevice11::OMSetBlendState(ID3D11BlendState* bs, u8 bf)
 
 void GSDevice11::OMSetRenderTargets(GSTexture* rt, GSTexture* ds, const GSVector4i* scissor, ID3D11DepthStencilView* read_only_dsv)
 {
+	// squash warnings
+	for (u32 i = 0; i < MAX_TEXTURES; i++)
+	{
+		if ((rt && m_state.ps_sr_views[i] == *(GSTexture11*)rt) || (ds && m_state.ps_sr_views[i] == *(GSTexture11*)ds))
+		{
+			m_state.ps_sr_views[i] = nullptr;
+			m_ctx->PSSetShaderResources(i, 1, &m_state.ps_sr_views[i]);
+		}
+	}
+
 	ID3D11RenderTargetView* rtv = nullptr;
 	ID3D11DepthStencilView* dsv = nullptr;
 
@@ -2503,7 +2528,7 @@ void GSDevice11::OMSetRenderTargets(GSTexture* rt, GSTexture* ds, const GSVector
 		dsv = *static_cast<GSTexture11*>(ds);
 	}
 
-	const bool changed = (m_state.rt_view != rtv || m_state.dsv != dsv);
+	const bool changed = (m_state.rt_view != rtv || m_state.dsv != dsv || m_state.uav[0] || m_state.uav[1]);
 	g_perfmon.Put(GSPerfMon::RenderPasses, static_cast<double>(changed));
 
 	if (m_state.rt_view != rtv)
@@ -2525,7 +2550,27 @@ void GSDevice11::OMSetRenderTargets(GSTexture* rt, GSTexture* ds, const GSVector
 		m_state.cached_dsv = ds;
 	}
 	if (changed)
-		m_ctx->OMSetRenderTargets(1, &rtv, dsv);
+	{
+		if (m_state.uav[0] || m_state.uav[1])
+		{
+			m_ctx->OMSetRenderTargetsAndUnorderedAccessViews(1, &rtv, dsv,
+				0, 0, nullptr, nullptr);
+			if (m_state.uav[0])
+			{
+				m_state.uav[0]->Release();
+				m_state.uav[0] = nullptr;
+			}
+			if (m_state.uav[1])
+			{
+				m_state.uav[1]->Release();
+				m_state.uav[1] = nullptr;
+			}
+		}
+		else
+		{
+			m_ctx->OMSetRenderTargets(1, &rtv, dsv);
+		}
+	}
 
 	if (rt || ds)
 	{
@@ -2555,6 +2600,83 @@ void GSDevice11::SetScissor(const GSVector4i& scissor)
 	{
 		m_state.scissor = scissor;
 		m_ctx->RSSetScissorRects(1, reinterpret_cast<const D3D11_RECT*>(&scissor));
+	}
+}
+
+void GSDevice11::OMSetUAVs(GSTexture* rt, GSTexture* ds, bool rov_depth, const GSVector4i* scissor)
+{
+	// squash warnings
+	for (u32 i = 0; i < MAX_TEXTURES; i++)
+	{
+		if ((rt && m_state.ps_sr_views[i] == *(GSTexture11*)rt) || (ds && m_state.ps_sr_views[i] == *(GSTexture11*)ds))
+		{
+			m_state.ps_sr_views[i] = nullptr;
+			m_ctx->PSSetShaderResources(i, 1, &m_state.ps_sr_views[i]);
+		}
+	}
+
+	ID3D11DepthStencilView* dsv = nullptr;
+	if (ds && !rov_depth)
+		dsv = *(GSTexture11*)ds;
+
+	std::array<ID3D11UnorderedAccessView*, 2> uavs;
+	uavs[0] = rt ? static_cast<ID3D11UnorderedAccessView*>(*(GSTexture11*)rt) : nullptr;
+	uavs[1] = rov_depth ? static_cast<ID3D11UnorderedAccessView*>(*(GSTexture11*)ds) : nullptr;
+
+	if (m_state.rt_view || m_state.dsv != dsv || m_state.uav != uavs)
+	{
+		if (m_state.rt_view)
+			m_state.rt_view->Release();
+		m_state.rt_view = nullptr;
+
+		if (m_state.dsv != dsv)
+		{
+			if (m_state.dsv)
+				m_state.dsv->Release();
+			if (dsv)
+				dsv->AddRef();
+			m_state.dsv = dsv;
+		}
+
+		for (u32 i = 0; i < uavs.size(); i++)
+		{
+			if (m_state.uav[i] != uavs[i])
+			{
+				if (m_state.uav[i])
+					m_state.uav[i]->Release();
+				m_state.uav[i] = uavs[i];
+				if (uavs[i])
+					uavs[i]->AddRef();
+			}
+		}
+
+		m_ctx->OMSetRenderTargetsAndUnorderedAccessViews(0, nullptr, dsv,
+			0, 2, uavs.data(), nullptr);
+	}
+
+	const GSVector2i size = rt ? rt->GetSize() : ds->GetSize();
+	if (m_state.viewport != size)
+	{
+		m_state.viewport = size;
+
+		D3D11_VIEWPORT vp;
+		memset(&vp, 0, sizeof(vp));
+
+		vp.TopLeftX = 0.0f;
+		vp.TopLeftY = 0.0f;
+		vp.Width = (float)size.x;
+		vp.Height = (float)size.y;
+		vp.MinDepth = 0.0f;
+		vp.MaxDepth = 1.0f;
+
+		m_ctx->RSSetViewports(1, &vp);
+	}
+
+	if (!m_state.scissor.eq(*scissor))
+	{
+		m_state.scissor = *scissor;
+
+		m_ctx->RSSetScissorRects(1, reinterpret_cast<const D3D11_RECT*>(scissor));
 	}
 }
 
@@ -2706,6 +2828,40 @@ void GSDevice11::RenderHW(GSHWDrawConfig& config)
 		PSSetShaderResource(1, config.pal);
 	}
 
+	GSTexture* draw_rt_clone = nullptr;
+	if (!config.ps.rov && (config.require_one_barrier || (config.tex && config.tex == config.rt))) // Used as "bind rt" flag when texture barrier is unsupported.
+	{
+		// Requires a copy of the RT.
+		// Used as "bind rt" flag when texture barrier is unsupported for tex is fb.
+		draw_rt_clone = CreateTexture(rtsize.x, rtsize.y, 1, colclip_rt ? GSTexture::Format::ColorClip : GSTexture::Format::Color, true);
+		if (draw_rt_clone)
+		{
+			CopyRect(colclip_rt ? colclip_rt : config.rt, draw_rt_clone, config.drawarea, config.drawarea.left, config.drawarea.top);
+			if (config.require_one_barrier)
+				PSSetShaderResource(2, draw_rt_clone);
+			if (config.tex && config.tex == config.rt)
+				PSSetShaderResource(0, draw_rt_clone);
+		}
+		else
+			Console.Warning("D3D11: Failed to allocate temp texture for RT copy.");
+
+	}
+
+	GSTexture* draw_ds_clone = nullptr;
+
+	if (config.tex && config.tex == config.ds)
+	{
+		// DX requires a copy when sampling the depth buffer.
+		draw_ds_clone = CreateDepthStencil(rtsize.x, rtsize.y, config.ds->GetFormat(), false);
+		if (draw_ds_clone)
+		{
+			CopyRect(config.ds, draw_ds_clone, config.drawarea, config.drawarea.left, config.drawarea.top);
+			PSSetShaderResource(0, draw_ds_clone);
+		}
+		else
+			Console.Warning("D3D11: Failed to allocate temp texture for DS copy.");
+	}
+
 	SetupVS(config.vs, &config.cb_vs);
 	SetupPS(config.ps, &config.cb_ps, config.sampler);
 
@@ -2742,8 +2898,6 @@ void GSDevice11::RenderHW(GSHWDrawConfig& config)
 		draw_ds = m_state.cached_dsv;
 	}
 
-	GSTexture* draw_rt_clone = nullptr;
-
 	if (draw_rt && (config.require_one_barrier || (config.require_full_barrier && m_features.multidraw_fb_copy) || (config.tex && config.tex == config.rt)))
 	{
 		// Requires a copy of the RT.
@@ -2762,6 +2916,24 @@ void GSDevice11::RenderHW(GSHWDrawConfig& config)
 		m_ctx->ClearDepthStencilView(*static_cast<GSTexture11*>(draw_ds), D3D11_CLEAR_STENCIL, 0.0f, 1);
 
 	SendHWDraw(config, draw_rt_clone, draw_rt, config.require_one_barrier, config.require_full_barrier, false);
+
+	if (config.ps.rov)
+		SetupOM(config.depth, OMBlendSelector(), 0);
+	else
+		SetupOM(config.depth, OMBlendSelector(config.colormask, config.blend), config.blend.constant);
+
+	if (config.ps.rov)
+		OMSetUAVs(config.rt, config.ds, config.rov_depth, &config.scissor);
+	else
+		OMSetRenderTargets(colclip_rt ? colclip_rt : config.rt, config.ds, &config.scissor);
+
+	OMSetRenderTargets(draw_rt, draw_ds, &config.scissor);
+	SetupOM(config.depth, OMBlendSelector(config.colormask, config.blend), config.blend.constant);
+
+	if (primid_texture)
+		PSSetShaderResource(3, primid_texture);
+
+	DrawIndexedPrimitive();
 
 	if (config.blend_multi_pass.enable)
 	{

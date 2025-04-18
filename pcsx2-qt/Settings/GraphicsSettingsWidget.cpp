@@ -253,6 +253,7 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* settings_dialog, 
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_advanced.extendedUpscales, "EmuCore/GS", "ExtendedUpscalingMultipliers", false);
 	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_advanced.exclusiveFullscreenControl, "EmuCore/GS", "ExclusiveFullscreenControl", -1, -1);
 	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_advanced.overrideTextureBarriers, "EmuCore/GS", "OverrideTextureBarriers", -1, -1);
+	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_advanced.overrideRasterizerOrderViews, "EmuCore/GS", "OverrideRasterizerOrderViews", -1, -1);
 	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_advanced.gsDumpCompression, "EmuCore/GS", "GSDumpCompression", static_cast<int>(GSDumpCompressionMethod::Zstandard));
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_advanced.disableFramebufferFetch, "EmuCore/GS", "DisableFramebufferFetch", false);
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_advanced.disableShaderCache, "EmuCore/GS", "DisableShaderCache", false);
@@ -1144,6 +1145,12 @@ void GraphicsSettingsWidget::updateRendererDependentOptions()
 
 	if (m_advanced.overrideTextureBarriers)
 		m_advanced.overrideTextureBarriers->setDisabled(is_disable_barriers);
+
+	if (m_advanced.disableFramebufferFetch)
+		m_advanced.disableFramebufferFetch->setDisabled(is_sw_dx);
+
+	if (m_advanced.overrideRasterizerOrderViews)
+		m_advanced.overrideRasterizerOrderViews->setEnabled(is_hardware);
 
 	if (m_advanced.disableFramebufferFetch)
 		m_advanced.disableFramebufferFetch->setDisabled(is_sw_dx);

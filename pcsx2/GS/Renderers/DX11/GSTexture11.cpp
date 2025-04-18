@@ -33,6 +33,7 @@ DXGI_FORMAT GSTexture11::GetDXGIFormat(Format format)
 	case GSTexture::Format::ColorHDR:     return DXGI_FORMAT_R16G16B16A16_FLOAT;
 	case GSTexture::Format::ColorClip:    return DXGI_FORMAT_R16G16B16A16_UNORM;
 	case GSTexture::Format::DepthStencil: return DXGI_FORMAT_R32G8X24_TYPELESS;
+	case GSTexture::Format::ColorDepth:   return DXGI_FORMAT_R32_FLOAT;
 	case GSTexture::Format::UNorm8:       return DXGI_FORMAT_A8_UNORM;
 	case GSTexture::Format::UInt16:       return DXGI_FORMAT_R16_UINT;
 	case GSTexture::Format::UInt32:       return DXGI_FORMAT_R32_UINT;
@@ -167,8 +168,10 @@ GSTexture11::operator ID3D11DepthStencilView*()
 
 GSTexture11::operator ID3D11UnorderedAccessView*()
 {
-	if (!m_uav)
+	if (!m_uav && m_desc.BindFlags & D3D11_BIND_UNORDERED_ACCESS)
+	{
 		GSDevice11::GetInstance()->GetD3DDevice()->CreateUnorderedAccessView(m_texture.get(), nullptr, m_uav.put());
+	}
 
 	return m_uav.get();
 }

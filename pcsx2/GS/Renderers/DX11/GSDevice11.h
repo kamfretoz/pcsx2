@@ -161,6 +161,8 @@ private:
 		ID3D11DepthStencilView* dsv;
 		GSTexture* cached_rt_view;
 		GSTexture* cached_dsv;
+
+		std::array<ID3D11UnorderedAccessView*, 2> uav;
 	} m_state;
 
 	std::array<std::array<wil::com_ptr_nothrow<ID3D11Query>, 3>, NUM_TIMESTAMP_QUERIES> m_timestamp_queries = {};
@@ -337,6 +339,7 @@ public:
 	void OMSetDepthStencilState(ID3D11DepthStencilState* dss, u8 sref);
 	void OMSetBlendState(ID3D11BlendState* bs, u8 bf);
 	void OMSetRenderTargets(GSTexture* rt, GSTexture* ds, const GSVector4i* scissor = nullptr, ID3D11DepthStencilView* read_only_dsv = nullptr);
+	void OMSetUAVs(GSTexture* rt, GSTexture* ds, bool rov_depth, const GSVector4i* scissor);
 	void SetViewport(const GSVector2i& viewport);
 	void SetScissor(const GSVector4i& scissor);
 
