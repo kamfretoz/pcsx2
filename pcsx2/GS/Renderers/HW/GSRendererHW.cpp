@@ -52,6 +52,15 @@ void GSRendererHW::Destroy()
 void GSRendererHW::PurgeTextureCache(bool sources, bool targets, bool hash_cache)
 {
 	g_texture_cache->RemoveAll(sources, targets, hash_cache);
+
+	if (targets)
+	{
+		g_gs_device->Recycle(m_rov_depth_tex.release());
+		m_rov_color_dst = nullptr;
+		m_rov_depth_dst = nullptr;
+		m_rov_depth_rect = GSVector4i::zero();
+		m_rov_mismatch_count = 0;
+	}
 }
 
 void GSRendererHW::ReadbackTextureCache()
@@ -94,6 +103,10 @@ void GSRendererHW::UpdateSettings(const Pcsx2Config::GSOptions& old_config)
 
 void GSRendererHW::VSync(u32 field, bool registers_written, bool idle_frame)
 {
+	EndROVDepth(nullptr, nullptr);
+	m_rov_color_dst = nullptr;
+	m_rov_mismatch_count = 0;
+
 	if (GSConfig.LoadTextureReplacements)
 		GSTextureReplacements::ProcessAsyncLoadedTextures();
 
@@ -5149,7 +5162,7 @@ void GSRendererHW::EmulateTextureShuffleAndFbmask(GSTextureCache::Target* rt, GS
 
 	bool enable_fbmask_emulation = false;
 	const GSDevice::FeatureSupport features = g_gs_device->Features();
-	if (features.texture_barrier || features.multidraw_fb_copy)
+	if (features.CanSampleFromFB() || features.multidraw_fb_copy)
 	{
 		enable_fbmask_emulation = GSConfig.AccurateBlendingUnit != AccBlendLevel::Minimum;
 	}
@@ -5193,7 +5206,7 @@ void GSRendererHW::EmulateTextureShuffleAndFbmask(GSTextureCache::Target* rt, GS
 
 		// If date is enabled you need to test the green channel instead of the alpha channel.
 		// Only enable this code in DATE mode to reduce the number of shaders.
-		m_conf.ps.write_rg = (process_rg & SHUFFLE_WRITE) && (features.texture_barrier || features.multidraw_fb_copy) && m_cached_ctx.TEST.DATE;
+		m_conf.ps.write_rg = (process_rg & SHUFFLE_WRITE) && (features.CanSampleFromFB() || features.multidraw_fb_copy) && m_cached_ctx.TEST.DATE;
 		m_conf.ps.real16src = m_copy_16bit_to_target_shuffle;
 		m_conf.ps.shuffle_same = m_same_group_texture_shuffle;
 		// Please bang my head against the wall!
@@ -5324,7 +5337,7 @@ void GSRendererHW::EmulateTextureShuffleAndFbmask(GSTextureCache::Target* rt, GS
 			   have been invalidated before subsequent Draws are executed.
 			 */
 			// No blending so hit unsafe path.
-			if (!PRIM->ABE || !(~ff_fbmask & ~zero_fbmask & 0x7) || !(features.texture_barrier || features.multidraw_fb_copy))
+			if (!PRIM->ABE || !(~ff_fbmask & ~zero_fbmask & 0x7) || !(features.CanSampleFromFB() || features.multidraw_fb_copy))
 			{
 				GL_INS("HW: FBMASK Unsafe SW emulated fb_mask:%x on %d bits format", m_cached_ctx.FRAME.FBMSK,
 					(m_conf.ps.dst_fmt == GSLocalMemory::PSM_FMT_16) ? 16 : 32);
@@ -5774,7 +5787,7 @@ void GSRendererHW::EmulateBlending(int rt_alpha_min, int rt_alpha_max, const boo
 	const bool alpha_mask = (m_cached_ctx.FRAME.FBMSK & 0xFF000000) == 0xFF000000;
 	bool blend_ad_alpha_masked = blend_ad && alpha_mask;
 	const bool is_basic_blend = GSConfig.AccurateBlendingUnit >= AccBlendLevel::Basic;
-	if (blend_ad_alpha_masked && (((is_basic_blend || (COLCLAMP.CLAMP == 0)) && (features.texture_barrier || features.multidraw_fb_copy))
+	if (blend_ad_alpha_masked && (((is_basic_blend || (COLCLAMP.CLAMP == 0)) && (features.CanSampleFromFB() || features.multidraw_fb_copy))
 		|| ((GSConfig.AccurateBlendingUnit >= AccBlendLevel::Medium) || m_conf.require_one_barrier)))
 	{
 		// Swap Ad with As for hw blend.
@@ -5841,14 +5854,14 @@ void GSRendererHW::EmulateBlending(int rt_alpha_min, int rt_alpha_max, const boo
 	// Condition 2: One barrier is already enabled, prims don't overlap or is a channel shuffle so let's use sw blend instead.
 	// Condition 3: A texture shuffle is unlikely to overlap, so we can prefer full sw blend.
 	// Condition 4: If it's tex in fb draw and there's no overlap prefer sw blend, fb is already being read.
-	const bool prefer_sw_blend = ((features.texture_barrier || features.multidraw_fb_copy) && m_conf.require_full_barrier) || (m_conf.require_one_barrier && (no_prim_overlap || m_channel_shuffle)) || m_conf.ps.shuffle || (no_prim_overlap && (m_conf.tex == m_conf.rt));
+	const bool prefer_sw_blend = ((features.CanSampleFromFB() || features.multidraw_fb_copy) && m_conf.require_full_barrier) || (m_conf.require_one_barrier && (no_prim_overlap || m_channel_shuffle)) || m_conf.ps.shuffle || (no_prim_overlap && (m_conf.tex == m_conf.rt));
 	const bool free_blend = blend_non_recursive // Free sw blending, doesn't require barriers or reading fb
 	                        || accumulation_blend; // Mix of hw/sw blending
 
 	// Warning no break on purpose
 	// Note: the [[fallthrough]] attribute tell compilers not to complain about not having breaks.
 	bool sw_blending = false;
-	if (features.texture_barrier || features.multidraw_fb_copy)
+	if (features.CanSampleFromFB() || features.multidraw_fb_copy)
 	{
 		// Try to lower sw blend on dx11, try to use blend multipass if possible on basic blend.
 		const bool blend_multipass_group = blend_multi_pass_support && !features.texture_barrier && features.multidraw_fb_copy &&
@@ -5942,17 +5955,14 @@ void GSRendererHW::EmulateBlending(int rt_alpha_min, int rt_alpha_max, const boo
 		}
 	}
 
-	if (features.framebuffer_fetch)
+	// If we have fbfetch, use software blending when we need the fb value for anything else.
+	// This saves outputting the second color when it's not needed.
+	if ((features.framebuffer_fetch && (one_barrier || m_conf.require_full_barrier)) || m_conf.ps.rov)
 	{
-		// If we have fbfetch, use software blending when we need the fb value for anything else.
-		// This saves outputting the second color when it's not needed.
-		if (one_barrier || m_conf.require_full_barrier)
-		{
-			sw_blending = true;
-			color_dest_blend = false;
-			accumulation_blend = false;
-			blend_mix = false;
-		}
+		sw_blending = true;
+		color_dest_blend = false;
+		accumulation_blend = false;
+		blend_mix = false;
 	}
 
 	// Color clip
@@ -5979,7 +5989,8 @@ void GSRendererHW::EmulateBlending(int rt_alpha_min, int rt_alpha_max, const boo
 			}
 		}
 
-		const bool free_colclip = !has_colclip_texture && (features.framebuffer_fetch || no_prim_overlap || blend_non_recursive);
+		const bool free_colclip = !has_colclip_texture && (features.framebuffer_fetch || features.raster_order_view || no_prim_overlap || blend_non_recursive);
+		GL_DBG("COLCLIP Info (Blending: %u/%u/%u/%u, OVERLAP: %d)", m_conf.ps.blend_a, m_conf.ps.blend_b, m_conf.ps.blend_c, m_conf.ps.blend_d, m_prim_overlap);
 		if (color_dest_blend || color_dest_blend2 || blend_zero_to_one_range)
 		{
 			// No overflow, disable colclip.
@@ -6043,7 +6054,7 @@ void GSRendererHW::EmulateBlending(int rt_alpha_min, int rt_alpha_max, const boo
 
 				m_conf.ps.pabe = 1;
 			}
-			else if (features.texture_barrier || features.multidraw_fb_copy)
+			else if (features.CanSampleFromFB() || features.multidraw_fb_copy)
 			{
 				// PABE sw blend:
 				// Disable hw/sw mix and do pure sw blend with reading the framebuffer.
@@ -6860,7 +6871,7 @@ __ri void GSRendererHW::HandleTextureHazards(const GSTextureCache::Target* rt, c
 			{
 				m_conf.tex = nullptr;
 				m_conf.ps.tex_is_fb = true;
-				if (m_prim_overlap == PRIM_OVERLAP_NO || !(g_gs_device->Features().texture_barrier || g_gs_device->Features().multidraw_fb_copy))
+				if (m_prim_overlap == PRIM_OVERLAP_NO || !(g_gs_device->Features().CanSampleFromFB() || g_gs_device->Features().multidraw_fb_copy))
 					m_conf.require_one_barrier = true;
 				else
 					m_conf.require_full_barrier = true;
@@ -7107,7 +7118,7 @@ bool GSRendererHW::CanUseTexIsFB(const GSTextureCache::Target* rt, const GSTextu
 	const TextureMinMaxResult& tmm)
 {
 	// Minimum blending -> we can't use tex-is-fb.
-	if (GSConfig.AccurateBlendingUnit == AccBlendLevel::Minimum)
+	if (GSConfig.AccurateBlendingUnit == AccBlendLevel::Minimum || !g_gs_device->Features().CanSampleFromFB())
 	{
 		GL_CACHE("HW: Disabling tex-is-fb due to minimum blending.");
 		return false;
@@ -7325,6 +7336,27 @@ __ri void GSRendererHW::DrawPrims(GSTextureCache::Target* rt, GSTextureCache::Ta
 
 	pxAssert(!ds || !rt || (m_conf.ds->GetSize().x == m_conf.rt->GetSize().x && m_conf.ds->GetSize().y == m_conf.rt->GetSize().y));
 
+	// End ROV early so we don't unnecessarily persist it in blending
+	const GSDevice::FeatureSupport features = g_gs_device->Features();
+	if (features.raster_order_view)
+	{
+		// get rid of existing ROV when we're changing targets
+		if (m_rov_color_dst && m_rov_color_dst != m_conf.rt)
+		{
+			// RT change, so end ROV
+			GL_INS("RT change, ending ROV");
+			m_rov_color_dst = nullptr;
+			m_rov_mismatch_count = 0;
+			EndROVDepth(m_conf.rt, m_conf.ds);
+		}
+		if (m_rov_depth_dst && m_conf.ds && (m_rov_depth_dst != m_conf.ds || m_rov_depth_dst == m_conf.tex))
+		{
+			GL_INS("DS change, ending ROV depth");
+			m_rov_mismatch_count = 0;
+			EndROVDepth(m_conf.rt, m_conf.ds);
+		}
+	}
+
 	// Z setup has to come before channel shuffle
 	EmulateZbuffer(ds);
 
@@ -7350,8 +7382,6 @@ __ri void GSRendererHW::DrawPrims(GSTextureCache::Target* rt, GSTextureCache::Ta
 			return;
 		}
 	}
-
-	const GSDevice::FeatureSupport features = g_gs_device->Features();
 
 	if (DATE)
 	{
@@ -7503,7 +7533,7 @@ __ri void GSRendererHW::DrawPrims(GSTextureCache::Target* rt, GSTextureCache::Ta
 
 		// It is way too complex to emulate texture shuffle with DATE, so use accurate path.
 		// No overlap should be triggered on gl/vk only as they support DATE_BARRIER.
-		if (features.framebuffer_fetch)
+		if (features.framebuffer_fetch || features.raster_order_view)
 		{
 			// Full DATE is "free" with framebuffer fetch. The barrier gets cleared below.
 			DATE_BARRIER = true;
@@ -7743,7 +7773,7 @@ __ri void GSRendererHW::DrawPrims(GSTextureCache::Target* rt, GSTextureCache::Ta
 	// Depth test is always true so it can be executed in 2 passes (no order required) unlike color.
 	// The idea is to compute first the color which is independent of the alpha test. And then do a 2nd
 	// pass to handle the depth based on the alpha test.
-	const bool ate_first_pass = m_cached_ctx.TEST.DoFirstPass();
+	bool ate_first_pass = m_cached_ctx.TEST.DoFirstPass();
 	bool ate_second_pass = m_cached_ctx.TEST.DoSecondPass();
 	bool ate_RGBA_then_Z = false;
 	bool ate_RGB_then_Z = false;
@@ -7826,6 +7856,12 @@ __ri void GSRendererHW::DrawPrims(GSTextureCache::Target* rt, GSTextureCache::Ta
 				DATE_one = false;
 				DATE_PRIMID = true;
 			}
+		}
+		else if (ate_second_pass && features.raster_order_view)
+		{
+			GL_INS("Using ROV for AFAIL");
+			ate_second_pass = false;
+			m_conf.require_full_barrier = true;
 		}
 	}
 
@@ -8024,14 +8060,108 @@ __ri void GSRendererHW::DrawPrims(GSTextureCache::Target* rt, GSTextureCache::Ta
 		m_conf.ps.rta_correction = rt->m_rt_alpha_scale;
 	}
 
-	if (features.framebuffer_fetch)
+	// do we want ROV for this draw?
+	bool use_rov = features.raster_order_view &&
+				   (m_conf.require_full_barrier || (!features.texture_barrier && m_conf.require_one_barrier));
+
+	// ROV setup
+	if (use_rov || m_rov_color_dst)
+	{
+		// preserve ROV/sw depth if we're already using it
+		bool mismatch = false;
+		if (m_rov_color_dst && !use_rov)
+		{
+			GL_INS("ROV not needed, but enabled, so using it (counter=%u)", m_rov_mismatch_count);
+			use_rov = true;
+			mismatch = true;
+		}
+
+		bool use_rov_depth = use_rov && m_conf.ds && m_conf.ps.NeedsROVDepth();
+		if (m_rov_depth_dst && !use_rov_depth)
+		{
+			GL_INS("SW depth not needed, but enabled, so using it (counter=%u)", m_rov_mismatch_count);
+			use_rov_depth = (m_conf.ds != nullptr);
+			mismatch = true;
+		}
+
+		// update mismatch counter
+		m_rov_mismatch_count = mismatch ? (m_rov_mismatch_count + 1) : 0;
+
+		if (use_rov)
+		{
+			// enable rov color output
+			m_conf.ps.rov = true;
+			m_conf.ps.no_color = true;
+			m_conf.ps.no_color1 = true;
+			m_rov_color_dst = rt->m_texture;
+
+			// force fbmask on when we're not writing all channels
+			if (m_conf.colormask.wrgba != 0xF)
+			{
+				if (!m_conf.ps.fbmask)
+				{
+					m_conf.ps.fbmask = true;
+					m_conf.cb_ps.FbMask = GSVector4i::zero();
+				}
+				if (!m_conf.colormask.wr)
+					m_conf.cb_ps.FbMask.r = 0xFF;
+				if (!m_conf.colormask.wg)
+					m_conf.cb_ps.FbMask.g = 0xFF;
+				if (!m_conf.colormask.wb)
+					m_conf.cb_ps.FbMask.b = 0xFF;
+				if (!m_conf.colormask.wa)
+					m_conf.cb_ps.FbMask.a = 0xFF;
+			}
+
+			// reset blending to sw
+			// TODO: don't... do this.
+			m_conf.ps.blend_a = false;
+			m_conf.ps.blend_b = false;
+			m_conf.ps.blend_c = false;
+			m_conf.ps.blend_d = false;
+			m_conf.ps.blend_hw = false;
+			m_conf.ps.blend_mix = false;
+			m_conf.ps.colclip_hw = false;
+			EmulateBlending(blend_alpha_min, blend_alpha_max, DATE, DATE_PRIMID, DATE_BARRIER, rt, can_scale_rt_alpha, new_scale_rt_alpha);
+
+			// kill all hw blending (it should be off anyway)
+			if (m_conf.blend.enable)
+				DevCon.Warning("HW blend enabled on ROV");
+			m_conf.blend = {};
+
+			// kill two pass atest, we can do it in a single pass
+			if (m_cached_ctx.TEST.ATE)
+			{
+				ate_first_pass = true;
+				ate_second_pass = false;
+				m_conf.ps.afail = m_context->TEST.AFAIL;
+			}
+
+			if (use_rov_depth)
+			{
+				// convert hw depth to sw depth
+				GL_INS("Using SW depth");
+				if (!BeginROVDepth(m_conf.ds, m_conf.drawarea)) [[unlikely]]
+					return;
+
+				m_conf.ps.ztst = m_conf.depth.ztst;
+				m_conf.ps.zwe = m_conf.depth.zwe;
+				m_conf.depth.ztst = ZTST_ALWAYS;
+				m_conf.depth.zwe = false;
+				m_conf.ds = m_rov_depth_tex.get();
+				m_conf.rov_depth = true;
+			}
+		}
+	}
+
+	if (features.framebuffer_fetch || use_rov)
 	{
 		// Intel GPUs on Metal lock up if you try to use DSB and framebuffer fetch at once
 		// We should never need to do that (since using framebuffer fetch means you should be able to do all blending in shader), but sometimes it slips through
 		if (m_conf.require_one_barrier || m_conf.require_full_barrier)
 			pxAssert(!m_conf.blend.enable);
 
-		// Barriers aren't needed with fbfetch.
+		// Barriers aren't needed with fbfetch or ROV.
 		m_conf.require_one_barrier = false;
 		m_conf.require_full_barrier = false;
 	}
@@ -8153,10 +8283,19 @@ __ri void GSRendererHW::DrawPrims(GSTextureCache::Target* rt, GSTextureCache::Ta
 		m_conf.drawlist_bbox = &m_drawlist_bbox;
 	}
 
+	// normal draw, no rov
 	if (!m_channel_shuffle_width)
 		g_gs_device->RenderHW(m_conf);
 	else
 		m_last_rt = rt;
+
+	// if we mismatched too many times, end rov
+	if (use_rov && m_rov_mismatch_count >= 20)
+	{
+		GL_INS("Disabling ROV due to too many mismatches");
+		m_rov_color_dst = nullptr;
+		EndROVDepth(m_conf.rt, ds ? ds->m_texture : nullptr);
+	}
 }
 
 // If the EE uploaded a new CLUT since the last draw, use that.
@@ -8348,6 +8487,152 @@ GSRendererHW::CLUTDrawTestResult GSRendererHW::PossibleCLUTDrawAggressive()
 
 	// Avoid invalidating anything here, we just want to avoid the thing being drawn on the GPU.
 	return CLUTDrawTestResult::CLUTDrawOnCPU;
+}
+
+bool GSRendererHW::CanContinueROVDepth(GSTexture* ds, const GSVector4i& area)
+{
+	if (!m_rov_depth_tex || m_rov_depth_dst != ds)
+		return false;
+
+	// new area is contained?
+	if (area.x >= m_rov_depth_rect.left && area.y >= m_rov_depth_rect.top &&
+		area.z <= m_rov_depth_rect.right && area.w <= m_rov_depth_rect.bottom)
+	{
+		// 2ez
+		return true;
+	}
+
+	// TODO: Align B
+	const GSVector4 ds_sz(GSVector4i(ds->GetSize()).xyxy());
+	GSDevice::MultiStretchRect new_rects[4];
+	u32 num_new_rects = 0;
+	const auto add_rect = [&](const GSVector4i& rc)
+	{
+		const GSVector4 frc(rc);
+		new_rects[num_new_rects++] = {
+			frc / ds_sz, frc, ds, false, 0xf
+		};
+	};
+
+	const GSVector4i& A = m_rov_depth_rect;
+	const GSVector4i& B = area;
+	if (B.top < A.top)
+	{
+		// rectangle above A
+		add_rect(GSVector4i(
+			std::min(A.left, B.left), B.top,
+			std::max(A.right, B.right), A.top
+		));
+	}
+	if (B.bottom > A.bottom)
+	{
+		// rectangle below A
+		add_rect(GSVector4i(
+			std::min(A.left, B.left), A.bottom,
+			std::max(A.right, B.right), B.bottom
+		));
+	}
+	if (B.left < A.left)
+	{
+		// rectangle to the left of A
+		add_rect(GSVector4i(
+			B.left, A.top, A.left, A.bottom
+		));
+	}
+	if (B.right > A.right)
+	{
+		// rectangle to the right of A
+		add_rect(GSVector4i(
+			A.right, A.top, B.right, A.bottom
+		));
+	}
+
+	// expand SW depth area
+	m_rov_depth_rect = GSVector4i(
+		std::min(A.left, B.left), std::min(A.top, B.top),
+		std::max(A.right, B.right), std::max(A.bottom, B.bottom)
+	);
+
+	pxAssertRel(num_new_rects > 0, "Has new rects");
+	g_gs_device->DrawMultiStretchRects(new_rects, num_new_rects, m_rov_depth_tex.get(), ShaderConvert::COPY);
+	return true;
+}
+
+bool GSRendererHW::BeginROVDepth(GSTexture* ds, const GSVector4i& area)
+{
+	// align the area to 128x128, hopefully reducing the number of times we need to do this
+	const int alignment = 128 * GSConfig.UpscaleMultiplier;
+	const GSVector4i aligned_area(area.ralign<Align_Outside>(GSVector2i(alignment, alignment)));
+
+	if (CanContinueROVDepth(ds, aligned_area))
+		return true;
+
+	EndROVDepth(nullptr, nullptr);
+
+	if (!m_rov_depth_tex || m_rov_depth_tex->GetSize() != ds->GetSize())
+	{
+		if (m_rov_depth_tex)
+			g_gs_device->Recycle(m_rov_depth_tex.release());
+
+		m_rov_depth_tex = std::unique_ptr<GSTexture>(
+			g_gs_device->CreateRenderTarget(ds->GetWidth(), ds->GetHeight(), GSTexture::Format::ColorDepth, false));
+		if (!m_rov_depth_tex) [[unlikely]]
+		{
+			GL_INS("ERROR: Failed to allocate memory for ROV depth, skipping.");
+			return false;
+		}
+	}
+
+	g_gs_device->InvalidateRenderTarget(m_rov_depth_tex.get());
+
+	const GSVector4 farea(aligned_area);
+	const GSVector4 sRect(farea / GSVector4(ds->GetWidth(), ds->GetHeight(), ds->GetWidth(), ds->GetHeight()));
+	g_gs_device->StretchRect(ds, sRect, m_rov_depth_tex.get(), farea, ShaderConvert::COPY, false);
+	m_rov_depth_dst = ds;
+	m_rov_depth_rect = aligned_area;
+	return true;
+}
+
+void GSRendererHW::EndROVDepth(GSTexture* new_rt, GSTexture* new_ds)
+{
+	if (!m_rov_depth_dst)
+		return;
+
+	// TODO: Leave RT bound to avoid a possible render pass restart after this.
+	const GSVector4 farea(m_rov_depth_rect);
+	g_gs_device->StretchRect(m_rov_depth_tex.get(),
+		farea / GSVector4(m_rov_depth_dst->GetWidth(), m_rov_depth_dst->GetHeight(), m_rov_depth_dst->GetWidth(),
+					m_rov_depth_dst->GetHeight()),
+		m_rov_depth_dst, farea, ShaderConvert::DEPTH_COPY, false);
+	m_rov_depth_dst = nullptr;
+	m_rov_depth_rect = GSVector4i::zero();
+}
+
+void GSRendererHW::FlushROVDepthForTexture(GSTexture* ds, bool discard)
+{
+	if (m_rov_depth_dst != ds)
+		return;
+
+	if (!discard)
+	{
+		GL_INS("Flushing ROV depth: %d,%d => %d,%d", m_rov_depth_rect.left, m_rov_depth_rect.top,
+			m_rov_depth_rect.right, m_rov_depth_rect.bottom);
+
+		const GSVector4 farea(m_rov_depth_rect);
+		g_gs_device->StretchRect(m_rov_depth_tex.get(),
+			farea / GSVector4(m_rov_depth_dst->GetWidth(), m_rov_depth_dst->GetHeight(), m_rov_depth_dst->GetWidth(),
+						m_rov_depth_dst->GetHeight()),
+			m_rov_depth_dst, farea, ShaderConvert::DEPTH_COPY, false);
+		m_rov_depth_dst = nullptr;
+		m_rov_depth_rect = GSVector4i::zero();
+	}
+	else
+	{
+		GL_INS("Discarding ROV depth.");
+	}
+
+	m_rov_depth_dst = nullptr;
+	m_rov_depth_rect = GSVector4i::zero();
 }
 
 bool GSRendererHW::CanUseSwPrimRender(bool no_rt, bool no_ds, bool draw_sprite_tex)
@@ -9546,7 +9831,7 @@ void GSRendererHW::EndHLEHardwareDraw(bool force_copy_on_hazard /* = false */)
 	{
 		const GSDevice::FeatureSupport features = g_gs_device->Features();
 
-		if (!force_copy_on_hazard && config.tex == config.rt)
+		if (!force_copy_on_hazard && config.tex == config.rt && features.CanSampleFromFB())
 		{
 			// Sample RT 1:1.
 			config.require_one_barrier = !features.framebuffer_fetch;

@@ -137,6 +137,10 @@ private:
 	bool IsUsingCsInBlend();
 	bool IsUsingAsInBlend();
 
+	bool CanContinueROVDepth(GSTexture* ds, const GSVector4i& area);
+	bool BeginROVDepth(GSTexture* ds, const GSVector4i& area);
+	void EndROVDepth(GSTexture* new_rt, GSTexture* new_ds);
+
 	// We modify some of the context registers to optimize away unnecessary operations.
 	// Instead of messing with the real context, we copy them and use those instead.
 	struct HWCachedCtx
@@ -199,6 +203,12 @@ private:
 
 	GSHWDrawConfig m_conf = {};
 	HWCachedCtx m_cached_ctx;
+
+	std::unique_ptr<GSTexture> m_rov_depth_tex;
+	GSTexture* m_rov_color_dst = nullptr;
+	GSTexture* m_rov_depth_dst = nullptr;
+	GSVector4i m_rov_depth_rect{};
+	u32 m_rov_mismatch_count = 0;
 
 	// software sprite renderer state
 	std::vector<GSVertexSW> m_sw_vertex_buffer;
@@ -273,4 +283,7 @@ public:
 
 	/// Compute the drawlist (if not already present) and bounding boxes for the current draw.
 	std::size_t ComputeDrawlistGetSize(float scale);
+
+	/// Finishes ROV depth if it matches.
+	void FlushROVDepthForTexture(GSTexture* ds, bool discard);
 };

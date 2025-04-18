@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2002-2025 PCSX2 Dev Team
+	// SPDX-FileCopyrightText: 2002-2025 PCSX2 Dev Team
 // SPDX-License-Identifier: GPL-3.0+
 
 #include "GSTextureCache.h"
@@ -1267,6 +1267,9 @@ GSTextureCache::Source* GSTextureCache::LookupDepthSource(const bool is_depth, c
 		src->m_32_bits_fmt = dst->m_32_bits_fmt;
 		src->m_valid_rect = dst->m_valid;
 		src->m_end_block = dst->m_end_block;
+
+		if (dst->m_type == DepthStencil)
+			GSRendererHW::GetInstance()->FlushROVDepthForTexture(dst->GetTexture(), false);
 
 		if (inside_target)
 		{
@@ -2715,6 +2718,9 @@ GSTextureCache::Target* GSTextureCache::LookupTarget(GIFRegTEX0 TEX0, const GSVe
 
 		if (dst->m_scale != scale && (!preserve_scale || is_shuffle || !dst->m_downscaled || TEX0.TBW != dst->m_TEX0.TBW))
 		{
+			if (dst->m_type == DepthStencil)
+				GSRendererHW::GetInstance()->FlushROVDepthForTexture(dst->GetTexture(), false);
+
 			calcRescale(dst);
 			GSTexture* tex = type == RenderTarget ? g_gs_device->CreateRenderTarget(new_scaled_size.x, new_scaled_size.y, GSTexture::Format::Color, clear) :
 			                                        g_gs_device->CreateDepthStencil(new_scaled_size.x, new_scaled_size.y, GSTexture::Format::DepthStencil, clear);
@@ -2905,6 +2911,8 @@ GSTextureCache::Target* GSTextureCache::LookupTarget(GIFRegTEX0 TEX0, const GSVe
 					// Force the valid rect to the new size in case of shrinkage.
 					dst->m_valid = dst_match->m_valid;
 					dst->UpdateValidity(dst_match->m_valid);
+
+					GSRendererHW::GetInstance()->FlushROVDepthForTexture(dst_match->GetTexture(), false);
 
 					if (type == RenderTarget)
 					{
@@ -3176,6 +3184,9 @@ GSTextureCache::Target* GSTextureCache::LookupTarget(GIFRegTEX0 TEX0, const GSVe
 			}
 			else
 			{
+				if (dst_match->m_type == DepthStencil)
+					GSRendererHW::GetInstance()->FlushROVDepthForTexture(dst_match->GetTexture(), false);
+
 				// The old target's going to get invalidated (at least until we handle concurrent frame+depth at the same BP),
 				// so just move the dirty rects across, unless the format is diffent, in which case we need to update it.
 				if (dst->m_TEX0.PSM != dst_match->m_TEX0.PSM)
@@ -7485,6 +7496,9 @@ GSTextureCache::Target::~Target()
 
 	if (m_texture)
 	{
+		if (m_type == DepthStencil)
+			GSRendererHW::GetInstance()->FlushROVDepthForTexture(m_texture, true);
+
 		g_texture_cache->m_target_memory_usage -= m_texture->GetMemUsage();
 		g_gs_device->Recycle(m_texture);
 	}
@@ -7534,6 +7548,9 @@ void GSTextureCache::Target::Update(bool cannot_scale)
 		m_dirty.clear();
 		return;
 	}
+
+	if (m_type == DepthStencil)
+		GSRendererHW::GetInstance()->FlushROVDepthForTexture(m_texture, false);
 
 	const GSVector4i t_offset(total_rect.xyxy());
 	const GSVector4i t_size(total_rect - t_offset);
@@ -7842,6 +7859,9 @@ bool GSTextureCache::Target::ResizeTexture(int new_unscaled_width, int new_unsca
 		Console.Error("(ResizeTexture) Failed to allocate %dx%d texture from %dx%d texture", size.x, size.y, new_size.x, new_size.y);
 		return false;
 	}
+
+	if (m_type == DepthStencil)
+		GSRendererHW::GetInstance()->FlushROVDepthForTexture(m_texture, false);
 
 	// Only need to copy if it's been written to.
 	if (m_texture->GetState() == GSTexture::State::Dirty)
