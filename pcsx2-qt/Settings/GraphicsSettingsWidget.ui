@@ -2575,6 +2575,112 @@
          </widget>
         </widget>
        </item>
+       <item>
+        <widget class="QGroupBox" name="debuggingOptions">
+         <property name="title">
+          <string>Debugging Options</string>
+         </property>
+         <layout class="QFormLayout" name="debuggingOptionsFormLayout">
+          <item row="0" column="0">
+           <widget class="QLabel" name="barriersLabel">
+            <property name="text">
+             <string>Override Texture Barriers:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QComboBox" name="overrideTextureBarriers">
+            <item>
+             <property name="text">
+              <string>Automatic (Default)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Force Disabled</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Force Enabled</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="2" column="0" colspan="2">
+           <layout class="QGridLayout" name="debuggingOptionsLayout">
+            <item row="0" column="1">
+             <widget class="QCheckBox" name="disableFramebufferFetch">
+              <property name="text">
+               <string>Disable Framebuffer Fetch</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="0">
+             <widget class="QCheckBox" name="disableShaderCache">
+              <property name="text">
+               <string>Disable Shader Cache</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="1">
+             <widget class="QCheckBox" name="disableVertexShaderExpand">
+              <property name="text">
+               <string>Disable Vertex Shader Expand</string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="0">
+             <widget class="QCheckBox" name="useDebugDevice">
+              <property name="text">
+               <string>Use Debug Device</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="label_49">
+            <property name="text">
+             <string>Override Rasterizer Order Views:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QComboBox" name="overrideRasterizerOrderViews">
+            <item>
+             <property name="text">
+              <string>Automatic (Default)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Force Disabled</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Force Enabled</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacer_2">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
       </layout>
      </widget>
     </widget>
