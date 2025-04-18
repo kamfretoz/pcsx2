@@ -844,6 +844,7 @@ bool Pcsx2Config::GSOptions::OptionsAreEqual(const GSOptions& right) const
 		OpEqu(UserHacks_TextureInsideRt) &&
 		OpEqu(UserHacks_BilinearHack) &&
 		OpEqu(OverrideTextureBarriers) &&
+		OpEqu(OverrideRasterizerOrderViews) &&
 
 		OpEqu(CAS_Sharpness) &&
 		OpEqu(ShadeBoost_Brightness) &&
@@ -894,6 +895,7 @@ bool Pcsx2Config::GSOptions::RestartOptionsAreEqual(const GSOptions& right) cons
 		   OpEqu(DisableFramebufferFetch) &&
 		   OpEqu(DisableVertexShaderExpand) &&
 		   OpEqu(OverrideTextureBarriers) &&
+		   OpEqu(OverrideRasterizerOrderViews) &&
 		   OpEqu(ExclusiveFullscreenControl);
 }
 
@@ -1036,6 +1038,7 @@ void Pcsx2Config::GSOptions::LoadSave(SettingsWrapper& wrap)
 	SettingsWrapIntEnumEx(UserHacks_GPUTargetCLUTMode, "UserHacks_GPUTargetCLUTMode");
 	SettingsWrapIntEnumEx(TriFilter, "TriFilter");
 	SettingsWrapBitfieldEx(OverrideTextureBarriers, "OverrideTextureBarriers");
+	SettingsWrapBitfieldEx(OverrideRasterizerOrderViews, "OverrideRasterizerOrderViews");
 
 	SettingsWrapBitfield(ShadeBoost_Brightness);
 	SettingsWrapBitfield(ShadeBoost_Contrast);
