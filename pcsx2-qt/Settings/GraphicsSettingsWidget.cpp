@@ -249,6 +249,7 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* dialog, QWidget* 
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.extendedUpscales, "EmuCore/GS", "ExtendedUpscalingMultipliers", false);
 	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_ui.exclusiveFullscreenControl, "EmuCore/GS", "ExclusiveFullscreenControl", -1, -1);
 	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_ui.overrideTextureBarriers, "EmuCore/GS", "OverrideTextureBarriers", -1, -1);
+	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_ui.overrideRasterizerOrderViews, "EmuCore/GS", "OverrideRasterizerOrderViews", -1, -1);
 	SettingWidgetBinder::BindWidgetToIntSetting(
 		sif, m_ui.gsDumpCompression, "EmuCore/GS", "GSDumpCompression", static_cast<int>(GSDumpCompressionMethod::Zstandard));
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.disableFramebufferFetch, "EmuCore/GS", "DisableFramebufferFetch", false);
@@ -1156,6 +1157,9 @@ void GraphicsSettingsWidget::updateRendererDependentOptions()
 
 	if (m_ui.overrideTextureBarriers)
 		m_ui.overrideTextureBarriers->setDisabled(is_disable_barriers);
+
+	if (m_ui.overrideRasterizerOrderViews)
+		m_ui.overrideRasterizerOrderViews->setEnabled(is_hardware);
 
 	if (m_ui.disableFramebufferFetch)
 		m_ui.disableFramebufferFetch->setDisabled(is_sw_dx);
