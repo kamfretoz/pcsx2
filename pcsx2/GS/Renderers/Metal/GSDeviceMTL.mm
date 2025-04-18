@@ -515,6 +515,7 @@ static constexpr MTLPixelFormat ConvertPixelFormat(GSTexture::Format format)
 		case GSTexture::Format::ColorHDR:     return MTLPixelFormatRGBA16Float;
 		case GSTexture::Format::ColorClip:    return MTLPixelFormatRGBA16Unorm;
 		case GSTexture::Format::DepthStencil: return MTLPixelFormatDepth32Float_Stencil8;
+		case GSTexture::Format::ColorDepth:   return MTLPixelFormatR32Float;
 		case GSTexture::Format::Invalid:      return MTLPixelFormatInvalid;
 		case GSTexture::Format::BC1:          return MTLPixelFormatBC1_RGBA;
 		case GSTexture::Format::BC2:          return MTLPixelFormatBC2_RGBA;
