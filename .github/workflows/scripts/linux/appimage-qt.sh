@@ -51,12 +51,6 @@ declare -a REMOVE_LIBS=(
 	'libwayland-egl.so*'
 )
 
-declare -a REMOVE_LIBS=(
-	'libwayland-client.so*'
-	'libwayland-cursor.so*'
-	'libwayland-egl.so*'
-)
-
 set -e
 
 LINUXDEPLOY=./linuxdeploy-x86_64.AppImage
@@ -133,16 +127,6 @@ $LINUXDEPLOY --plugin qt --appdir="$OUTDIR" --executable="$BUILDDIR/bin/pcsx2-qt
 
 echo "Copying resources into AppDir..."
 cp -a "$BUILDDIR/bin/resources" "$OUTDIR/usr/bin"
-
-# Why do we have to manually remove these libs? Because the linuxdeploy Qt plugin
-# copies them, not the "main" linuxdeploy binary, and plugins don't inherit the
-# include list...
-for lib in "${REMOVE_LIBS[@]}"; do
-	for libpath in $(find "$OUTDIR/usr/lib" -name "$lib"); do
-		echo "    Removing problematic library ${libpath}."
-		rm -f "$libpath"
-	done
-done
 
 # Why do we have to manually remove these libs? Because the linuxdeploy Qt plugin
 # copies them, not the "main" linuxdeploy binary, and plugins don't inherit the
