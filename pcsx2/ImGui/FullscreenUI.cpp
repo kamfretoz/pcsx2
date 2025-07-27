@@ -4633,6 +4633,14 @@ void FullscreenUI::DrawGraphicsSettingsPage(SettingsInterface* bsi, bool show_ad
 		"11",
 		"12",
 	};
+
+	static constexpr const char* s_mipmapping_options[] = {
+		FSUI_NSTR("Disabled"),
+		FSUI_NSTR("Enabled"),
+		FSUI_NSTR("All Levels"),
+		FSUI_NSTR("Unclamped"),
+	};
+
 	static constexpr const char* s_bilinear_options[] = {
 		FSUI_NSTR("Nearest"),
 		FSUI_NSTR("Bilinear (Forced)"),
@@ -4772,6 +4780,9 @@ void FullscreenUI::DrawGraphicsSettingsPage(SettingsInterface* bsi, bool show_ad
 		DrawStringListSetting(bsi, FSUI_ICONSTR(ICON_FA_ARROW_UP_RIGHT_FROM_SQUARE, "Internal Resolution"),
 			FSUI_CSTR("Multiplies the render resolution by the specified factor (upscaling)."), "EmuCore/GS", "upscale_multiplier",
 			"1.000000", s_resolution_options, s_resolution_values, std::size(s_resolution_options), true);
+		DrawIntListSetting(
+			bsi, FSUI_ICONSTR(ICON_FA_BULLSEYE, "Mipmapping"), FSUI_CSTR("Enables emulation of the GS's texture mipmapping."), "EmuCore/GS", "hw_mipmap_mode",
+			static_cast<int>(GSHWMipmapMode::Enabled), s_mipmapping_options, std::size(s_mipmapping_options), true);
 		DrawIntListSetting(bsi, FSUI_ICONSTR(ICON_FA_TABLE_CELLS_LARGE, "Bilinear Filtering"),
 			FSUI_CSTR("Selects where bilinear filtering is utilized when rendering textures."), "EmuCore/GS", "filter",
 			static_cast<int>(BiFiltering::PS2), s_bilinear_options, std::size(s_bilinear_options), true);
@@ -4786,8 +4797,6 @@ void FullscreenUI::DrawGraphicsSettingsPage(SettingsInterface* bsi, bool show_ad
 		DrawIntListSetting(bsi, FSUI_ICONSTR(ICON_FA_SPLOTCH, "Blending Accuracy"),
 			FSUI_CSTR("Determines the level of accuracy when emulating blend modes not supported by the host graphics API."), "EmuCore/GS",
 			"accurate_blending_unit", static_cast<int>(AccBlendLevel::Basic), s_blending_options, std::size(s_blending_options), true);
-		DrawToggleSetting(
-			bsi, FSUI_ICONSTR(ICON_FA_BULLSEYE, "Mipmapping"), FSUI_CSTR("Enables emulation of the GS's texture mipmapping."), "EmuCore/GS", "hw_mipmap", true);
 	}
 	else
 	{
@@ -5047,10 +5056,9 @@ void FullscreenUI::DrawGraphicsSettingsPage(SettingsInterface* bsi, bool show_ad
 			FSUI_CSTR("Forces the use of FIFO over Mailbox presentation, i.e. double buffering instead of triple buffering. "
 					  "Usually results in worse frame pacing."),
 			"EmuCore/GS", "DisableMailboxPresentation", false);
-		/* DrawToggleSetting(bsi, FSUI_CSTR("Extended Upscaling Multipliers"),
+		DrawToggleSetting(bsi, FSUI_CSTR("Extended Upscaling Multipliers"),
 			FSUI_CSTR("Displays additional, very high upscaling multipliers dependent on GPU capability."),
-			"EmuCore/GS", "ExtendedUpscalingMultipliers", false); */
-		// TODO: Immplement this button properly
+			"EmuCore/GS", "ExtendedUpscalingMultipliers", false);
 		if (IsEditingGameSettings(bsi))
 		{
 			DrawIntListSetting(bsi, FSUI_CSTR("Hardware Download Mode"), FSUI_CSTR("Changes synchronization behavior for GS downloads."),
@@ -9328,6 +9336,9 @@ TRANSLATE_NOOP("FullscreenUI", "Enables the option to show the overscan area on 
 TRANSLATE_NOOP("FullscreenUI", "Enables internal Anti-Blur hacks. Less accurate to PS2 rendering but will make a lot of games look less blurry.");
 TRANSLATE_NOOP("FullscreenUI", "Rendering");
 TRANSLATE_NOOP("FullscreenUI", "Multiplies the render resolution by the specified factor (upscaling).");
+TRANSLATE_NOOP("FullscreenUI", "Mipmapping");
+TRANSLATE_NOOP("FullscreenUI", "Enables emulation of the GS's texture mipmapping.");
+TRANSLATE_NOOP("FullscreenUI", "Bilinear Filtering");
 TRANSLATE_NOOP("FullscreenUI", "Selects where bilinear filtering is utilized when rendering textures.");
 TRANSLATE_NOOP("FullscreenUI", "Selects where trilinear filtering is utilized when rendering textures.");
 TRANSLATE_NOOP("FullscreenUI", "Selects where anisotropic filtering is utilized when rendering textures.");
@@ -9793,6 +9804,10 @@ TRANSLATE_NOOP("FullscreenUI", "9x Native (~3240px)");
 TRANSLATE_NOOP("FullscreenUI", "10x Native (~3600px/6K UHD)");
 TRANSLATE_NOOP("FullscreenUI", "11x Native (~3960px)");
 TRANSLATE_NOOP("FullscreenUI", "12x Native (~4320px/8K UHD)");
+TRANSLATE_NOOP("FullscreenUI", "Disabled");
+TRANSLATE_NOOP("FullscreenUI", "Enabled");
+TRANSLATE_NOOP("FullscreenUI", "All Levels");
+TRANSLATE_NOOP("FullscreenUI", "Unclamped");
 TRANSLATE_NOOP("FullscreenUI", "Nearest");
 TRANSLATE_NOOP("FullscreenUI", "Bilinear (Forced)");
 TRANSLATE_NOOP("FullscreenUI", "Bilinear (PS2)");

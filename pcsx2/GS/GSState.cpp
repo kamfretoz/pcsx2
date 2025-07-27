@@ -100,7 +100,7 @@ GSState::GSState()
 	// m_nativeres seems to be a hack. Unfortunately it impacts draw call number which make debug painful in the replayer.
 	// Let's keep it disabled to ease debug.
 	m_nativeres = GSConfig.UpscaleMultiplier == 1.0f;
-	m_mipmap = GSConfig.Mipmap;
+	m_mipmap = (GSConfig.HWMipmapMode >= GSHWMipmapMode::Enabled);
 
 	s_n = 0;
 	s_transfer_n = 0;
@@ -322,7 +322,7 @@ void GSState::ResetPCRTC()
 
 void GSState::UpdateSettings(const Pcsx2Config::GSOptions& old_config)
 {
-	m_mipmap = GSConfig.Mipmap;
+	m_mipmap = (GSConfig.HWMipmapMode >= GSHWMipmapMode::Enabled);
 
 	if (
 		GSConfig.AutoFlushSW != old_config.AutoFlushSW ||

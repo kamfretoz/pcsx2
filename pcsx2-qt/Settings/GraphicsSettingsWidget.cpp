@@ -110,7 +110,8 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* settings_dialog, 
 	SettingWidgetBinder::BindWidgetToEnumSetting(sif, m_hw.anisotropicFiltering, "EmuCore/GS", "MaxAnisotropy",
 		s_anisotropic_filtering_entries, s_anisotropic_filtering_values, "0");
 	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_hw.dithering, "EmuCore/GS", "dithering_ps2", 2);
-	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_hw.mipmapping, "EmuCore/GS", "hw_mipmap", true);
+	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_hw.hwMipmapMode, "EmuCore/GS", "hw_mipmap_mode",
+		static_cast<int>(GSHWMipmapMode::Enabled));
 	SettingWidgetBinder::BindWidgetToIntSetting(
 		sif, m_hw.blending, "EmuCore/GS", "accurate_blending_unit", static_cast<int>(AccBlendLevel::Basic));
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_hw.enableHWFixes, "EmuCore/GS", "UserHacks", false);
@@ -306,7 +307,8 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* settings_dialog, 
 
 #ifndef _WIN32
 	// Exclusive fullscreen control is Windows-only.
-	m_advanced.advancedOptionsFormLayout->removeRow(2);
+	m_advanced.exclusiveFullscreenControl->deleteLater();
+	m_advanced.exclussiveFSLabel->deleteLater();
 	m_advanced.exclusiveFullscreenControl = nullptr;
 #endif
 
@@ -314,7 +316,7 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* settings_dialog, 
 	if (!dialog()->isPerGameSettings())
 	{
 		// Only allow disabling readbacks for per-game settings, it's too dangerous.
-		m_advanced.advancedOptionsFormLayout->removeRow(0);
+		m_advanced.advancedLayout->removeWidget(m_advanced.gsDownloadMode);
 		m_advanced.gsDownloadMode = nullptr;
 
 		// Don't allow setting hardware fixes globally.
@@ -485,7 +487,7 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* settings_dialog, 
 			   "size for PNG."));
 
 		dialog()->registerWidgetHelp(m_display.stretchY, tr("Vertical Stretch"), tr("100%"),
-			// Characters </> need to be converted into entities in order to be shown correctly.
+			// Characters </;> need to be converted into entities in order to be shown correctly.
 			tr("Stretches (&lt; 100%) or squashes (&gt; 100%) the vertical component of the display."));
 
 		dialog()->registerWidgetHelp(m_display.fullscreenModes, tr("Fullscreen Mode"), tr("Borderless Fullscreen"),
@@ -513,7 +515,8 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* settings_dialog, 
 			   "FMV resolution will remain unchanged, as the video files are pre-rendered."));
 
 		dialog()->registerWidgetHelp(
-			m_hw.mipmapping, tr("Mipmapping"), tr("Checked"), tr("Enables mipmapping, which some games require to render correctly. Mipmapping uses progressively lower resolution variants of textures at progressively further distances to reduce processing load and avoid visual artifacts."));
+            m_hw.hwMipmapMode, tr("Mipmapping"), tr("Enabled"), tr("Enables mipmapping, which many games require to render correctly. "
+			   "Unclamped allows higher texture detail levels to be used, but may break certain graphical effects."));
 
 		dialog()->registerWidgetHelp(
 			m_hw.textureFiltering, tr("Texture Filtering"), tr("Bilinear (PS2)"),

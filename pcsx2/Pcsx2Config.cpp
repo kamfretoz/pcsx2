@@ -749,8 +749,6 @@ Pcsx2Config::GSOptions::GSOptions()
 	GPUPaletteConversion = false;
 	AutoFlushSW = true;
 	PreloadFrameWithGSData = false;
-	Mipmap = true;
-	HWMipmap = true;
 
 	ManualUserHacks = false;
 	UserHacks_AlignSpriteX = false;
@@ -819,6 +817,7 @@ bool Pcsx2Config::GSOptions::OptionsAreEqual(const GSOptions& right) const
 		OpEqu(UpscaleMultiplier) &&
 
 		OpEqu(AccurateBlendingUnit) &&
+		OpEqu(HWMipmapMode) &&
 		OpEqu(TextureFiltering) &&
 		OpEqu(TexturePreloading) &&
 		OpEqu(GSDumpCompression) &&
@@ -970,7 +969,7 @@ void Pcsx2Config::GSOptions::LoadSave(SettingsWrapper& wrap)
 	SettingsWrapBitBoolEx(GPUPaletteConversion, "paltex");
 	SettingsWrapBitBoolEx(AutoFlushSW, "autoflush_sw");
 	SettingsWrapBitBoolEx(PreloadFrameWithGSData, "preload_frame_with_gs_data");
-	SettingsWrapBitBoolEx(Mipmap, "mipmap");
+	SettingsWrapIntEnumEx(HWMipmapMode, "hw_mipmap_mode");
 	SettingsWrapBitBoolEx(ManualUserHacks, "UserHacks");
 	SettingsWrapBitBoolEx(UserHacks_AlignSpriteX, "UserHacks_align_sprite_X");
 	SettingsWrapIntEnumEx(UserHacks_AutoFlush, "UserHacks_AutoFlushLevel");
@@ -1022,7 +1021,7 @@ void Pcsx2Config::GSOptions::LoadSave(SettingsWrapper& wrap)
 	SettingsWrapIntEnumEx(Renderer, "Renderer");
 	SettingsWrapEntryEx(UpscaleMultiplier, "upscale_multiplier");
 
-	SettingsWrapBitBoolEx(HWMipmap, "hw_mipmap");
+	SettingsWrapIntEnumEx(HWMipmapMode, "hw_mipmap_mode");
 	SettingsWrapIntEnumEx(AccurateBlendingUnit, "accurate_blending_unit");
 	SettingsWrapIntEnumEx(TextureFiltering, "filter");
 	SettingsWrapIntEnumEx(TexturePreloading, "texture_preloading");
