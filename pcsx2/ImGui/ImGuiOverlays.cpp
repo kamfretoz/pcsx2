@@ -670,7 +670,7 @@ __ri void ImGuiManager::DrawInputsOverlay(float scale, float margin, float spaci
 
 	for (u32 port = 0; port < USB::NUM_PORTS; port++)
 	{
-		if (EmuConfig.USB.Ports[port].DeviceType >= 0 && !USB::GetDeviceBindings(port).empty())
+		if (EmuConfig.USB.Ports[port].DeviceType >= 0)
 			num_ports++;
 	}
 
@@ -689,7 +689,7 @@ __ri void ImGuiManager::DrawInputsOverlay(float scale, float margin, float spaci
 
 		const Pad::ControllerInfo& cinfo = pad->GetInfo();
 		if (cinfo.icon_name)
-			text.format("{} {}", cinfo.icon_name, slot + 1u);
+			text.format("{} {} |", cinfo.icon_name, slot + 1u);
 		else
 			text.format("{} |", slot + 1u);
 
@@ -744,10 +744,10 @@ __ri void ImGuiManager::DrawInputsOverlay(float scale, float margin, float spaci
 			continue;
 
 		const std::span<const InputBindingInfo> bindings(USB::GetDeviceBindings(port));
-		if (bindings.empty())
-			continue;
 
-		text.format("{} {} ", ICON_PF_USB, port + 1u);
+		const char* icon = USB::GetDeviceIconName(port);
+
+		text.format("{} {} | ", icon ? icon : ICON_PF_USB, port + 1u);
 
 		for (const InputBindingInfo& bi : bindings)
 		{
