@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0+
 
 #include "AutoUpdaterDialog.h"
+#include "BuildVersion.h"
 #include "Debugger/DebuggerWindow.h"
 #include "DisplayWidget.h"
 #include "GameList/GameListWidget.h"
@@ -2287,7 +2288,7 @@ bool QtHost::ParseCommandLineOptions(const QStringList& args, std::shared_ptr<VM
 		Console.Warning("Skipping autoboot due to no boot parameters.");
 		autoboot.reset();
 	}
-	
+
 	if(autoboot && autoboot->start_turbo.value_or(false) && autoboot->start_unlimited.value_or(false))
 	{
 		Console.Warning("Both turbo and unlimited frame limit modes requested. Using unlimited.");
@@ -2344,6 +2345,14 @@ void QtHost::RegisterTypes()
 	qRegisterMetaType<Achievements::LoginRequestReason>();
 }
 
+void QtHost::setQApplicationProperty()
+{
+	QApplication::setApplicationName("PCSX2");
+	QApplication::setApplicationVersion(BuildVersion::GitRev);
+	QApplication::setOrganizationName("PCSX2 Team");
+	QApplication::setOrganizationDomain("pcsx2.net");
+}
+
 bool QtHost::RunSetupWizard()
 {
 	SetupWizardDialog dialog;
@@ -2386,6 +2395,8 @@ int main(int argc, char* argv[])
 #ifdef _WIN32
 	std::locale::global(std::locale(""));
 #endif
+	// Set the application name properties
+	QtHost::setQApplicationProperty();
 
 	QGuiApplication::setHighDpiScaleFactorRoundingPolicy(Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
 	QtHost::RegisterTypes();
