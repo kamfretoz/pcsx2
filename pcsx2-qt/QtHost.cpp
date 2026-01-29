@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0+
 
 #include "AutoUpdaterDialog.h"
+#include "BuildVersion.h"
 #include "Debugger/DebuggerWindow.h"
 #include "DisplayWidget.h"
 #include "GameList/GameListWidget.h"
@@ -195,7 +196,7 @@ void EmuThread::stopFullscreenUI()
 	{
 		m_run_fullscreen_ui.store(false, std::memory_order_release);
 		emit onFullscreenUIStateChange(false);
-		
+
 		// Resume and refresh background when FullscreenUI exits
 		QMetaObject::invokeMethod(g_main_window, "updateGameListBackground", Qt::QueuedConnection);
 	}
@@ -1369,7 +1370,7 @@ bool QtHost::InitializeConfig()
 					.arg(QString::fromStdString(error.GetDescription())));
 			return false;
 		}
-		
+
 	}
 
 	// Setup wizard was incomplete last time?
@@ -2327,6 +2328,14 @@ void QtHost::RegisterTypes()
 	qRegisterMetaType<Achievements::LoginRequestReason>();
 }
 
+void QtHost::setQApplicationProperty()
+{
+	QApplication::setApplicationName("PCSX2");
+	QApplication::setApplicationVersion(BuildVersion::GitRev);
+	QApplication::setOrganizationName("PCSX2 Team");
+	QApplication::setOrganizationDomain("pcsx2.net");
+}
+
 bool QtHost::RunSetupWizard()
 {
 	SetupWizardDialog dialog;
@@ -2369,6 +2378,8 @@ int main(int argc, char* argv[])
 #ifdef _WIN32
 	std::locale::global(std::locale(""));
 #endif
+	// Set the application name properties
+	QtHost::setQApplicationProperty();
 
 	QGuiApplication::setHighDpiScaleFactorRoundingPolicy(Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
 	QtHost::RegisterTypes();

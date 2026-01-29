@@ -226,6 +226,9 @@ extern EmuThread* g_emu_thread;
 
 namespace QtHost
 {
+	/// Sets the Qt's application name property
+	void setQApplicationProperty();
+
 	/// Default theme name for the platform.
 	const char* GetDefaultThemeName();
 
